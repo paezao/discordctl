@@ -98,6 +98,18 @@ describe("execution", () => {
     expect(report.results.map((r) => r.status)).toEqual(["failed", "applied"]);
   });
 
+  it("is not stale when Discord merely returns collections in a different order", async () => {
+    const { api, store } = setup(["COMMUNITY", "NEWS", "GUILD_ONBOARDING"]);
+    const service = new DiscordctlService({ api, store });
+    const cfg = CONFIG.replace("${DISCORD_GUILD_ID}", GUILD_ID);
+    await service.apply((await service.plan({ text: cfg })).plan);
+    const next = cfg.replace("{ key: two, name: two }", "{ key: two, name: two }, { key: three, name: three }");
+    const { plan: p, desired } = await service.plan({ text: next });
+    const { report, remaining } = await service.apply(p, { desired });
+    expect(report.status).toBe("success");
+    expect(remaining!.ops).toEqual([]);
+  });
+
   it("refuses to apply a plan when the guild changed after planning", async () => {
     const { api, store } = setup();
     const service = new DiscordctlService({ api, store });

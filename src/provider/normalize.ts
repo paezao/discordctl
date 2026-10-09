@@ -56,7 +56,8 @@ export function normalizeChannel(c: APIChannel): ActualChannel {
     topic: (any.topic as string | null | undefined) ?? null,
     nsfw: Boolean(any.nsfw),
     slowmode: (any.rate_limit_per_user as number | undefined) ?? 0,
-    overwrites: ((any.permission_overwrites as APIOverwrite[] | undefined) ?? []).map(normalizeOverwrite),
+    // Discord returns overwrites (and guild features) in varying order; sort for stable comparisons.
+    overwrites: ((any.permission_overwrites as APIOverwrite[] | undefined) ?? []).map(normalizeOverwrite).sort((a, b) => a.id.localeCompare(b.id)),
     flags: (any.flags as number | undefined) ?? 0,
   };
   if (kind === "voice" || kind === "stage") {
@@ -91,7 +92,7 @@ export function normalizeGuild(g: APIGuild): ActualGuild {
     id: g.id,
     name: g.name,
     ownerId: g.owner_id,
-    features: [...g.features].map(String),
+    features: [...g.features].map(String).sort(),
     description: g.description ?? null,
     verificationLevel: g.verification_level,
     defaultMessageNotifications: g.default_message_notifications,

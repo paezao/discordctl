@@ -235,7 +235,9 @@ export function resolveConfig(loaded: LoadedConfig, options: ResolveOptions = {}
     if (topic !== undefined) {
       const max = THREAD_CONTAINER_KINDS.has(kind) ? 4096 : 1024;
       if (topic !== null && topic.length > max) err("TOPIC_TOO_LONG", `Topic is ${topic.length} characters; ${kind} channels allow ${max}`, `${path}.topic`);
-      ch.topic = topic === "" ? null : topic;
+      // Discord strips trailing whitespace (e.g. the newline a YAML `|` block adds); match it so plans converge.
+      const trimmed = topic === null ? null : topic.trimEnd();
+      ch.topic = trimmed === "" ? null : trimmed;
     }
     if (spec.nsfw !== undefined) ch.nsfw = spec.nsfw;
     if (spec.slowmode !== undefined) {

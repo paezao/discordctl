@@ -8,7 +8,7 @@ import { hashValue } from "../util/hash.js";
  */
 export function fingerprintSnapshot(s: GuildSnapshot): string {
   return hashValue({
-    guild: { ...s.guild },
+    guild: { ...s.guild, features: [...s.guild.features].sort() },
     roles: [...s.roles].sort((a, b) => a.id.localeCompare(b.id)),
     channels: [...s.channels]
       .sort((a, b) => a.id.localeCompare(b.id))

@@ -186,6 +186,13 @@ describe("plan generation", () => {
     expect((await plan(api, store, withTags)).plan.ops).toEqual([]);
   });
 
+  it("does not see a diff in multi-line topics that Discord trims", async () => {
+    const { api, store } = setup();
+    const yaml = base + "channels:\n  - key: f\n    name: forum\n    type: forum\n    guidelines: |\n      Line one.\n      Line two.\n";
+    await apply(api, store, desiredFrom(yaml));
+    expect((await plan(api, store, desiredFrom(yaml))).plan.ops).toEqual([]);
+  });
+
   it("never converts incompatible channel types", async () => {
     const { api, store } = setup();
     await apply(api, store, desiredFrom(base + "channels: [{ key: x, name: lounge }]"));

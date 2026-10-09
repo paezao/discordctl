@@ -47,6 +47,8 @@ export class FakeDiscord implements DiscordApi {
   readonly calls: FakeCall[] = [];
   private nextId = 100000000000000000n;
   private failures: FailureRule[] = [];
+  /** Real Discord returns unordered collections in varying order; rotate them per read. */
+  private reads = 0;
 
   constructor(botUserId = "900000000000000001") {
     this.botUser = { id: botUserId, username: "discordctl-test-bot", discriminator: "0", global_name: null, avatar: null, bot: true } as APIUser;
@@ -174,6 +176,7 @@ export class FakeDiscord implements DiscordApi {
     for (const [k, v] of Object.entries(body)) {
       if (v === undefined) continue;
       if (k === "name") channel.name = this.normalizeName(type, v as string);
+      else if (k === "topic") channel.topic = typeof v === "string" ? v.trimEnd() || null : v; // Discord strips trailing whitespace
       else if (k === "permission_overwrites") {
         channel.permission_overwrites = (v as Json[]).map((o) => ({ id: o.id, type: o.type, allow: String(o.allow ?? "0"), deny: String(o.deny ?? "0") }));
       } else if (k === "available_tags") {
@@ -205,7 +208,9 @@ export class FakeDiscord implements DiscordApi {
   async getGuild(guildId: string): Promise<APIGuild> {
     this.record("getGuild", [guildId]);
     const s = this.g(guildId);
-    return structuredClone({ ...s.guild, roles: s.roles }) as unknown as APIGuild;
+    const guild: Json = structuredClone({ ...s.guild, roles: s.roles });
+    guild.features = rotate(guild.features as string[], ++this.reads);
+    return guild as unknown as APIGuild;
   }
 
   async getGuildRoles(guildId: string): Promise<APIRole[]> {
@@ -215,7 +220,10 @@ export class FakeDiscord implements DiscordApi {
 
   async getGuildChannels(guildId: string): Promise<APIChannel[]> {
     this.record("getGuildChannels", [guildId]);
-    return structuredClone(this.g(guildId).channels) as unknown as APIChannel[];
+    const channels = structuredClone(this.g(guildId).channels);
+    const n = ++this.reads;
+    for (const c of channels) if (Array.isArray(c.permission_overwrites)) c.permission_overwrites = rotate(c.permission_overwrites, n);
+    return channels as unknown as APIChannel[];
   }
 
   async getGuildMember(guildId: string, userId: string): Promise<APIGuildMember> {
@@ -368,4 +376,10 @@ export class FakeDiscord implements DiscordApi {
   rawGuild(guildId: string): FakeGuildState {
     return this.g(guildId);
   }
+}
+
+function rotate<T>(list: T[], n: number): T[] {
+  if (list.length < 2) return list;
+  const k = n % list.length;
+  return [...list.slice(k), ...list.slice(0, k)];
 }

@@ -218,6 +218,11 @@ categories:
         preset: public-voice
         userLimit: 8
 
+      - key: party-3
+        name: "🔊╺╸party-3"
+        preset: public-voice
+        userLimit: 8
+
   # ------------------------------------------------------------------ THE LAB
   - key: the-lab
     name: "🧪 THE LAB"
