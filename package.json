@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Infrastructure as Code for Discord servers: declarative YAML, plan/apply, permission auditing, and an MCP server for AI agents.",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22.16.0"
   },
@@ -25,7 +25,8 @@
     "examples",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
