@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.discordctl/
+*.db
+*.db-journal
+*.log
+.claude/*.lock

@@ -1,0 +1,82 @@
+# Gaming Community template. Edit freely: this is plain discordctl YAML.
+version: 1
+metadata:
+  name: Gaming Community
+  description: Public gaming server with LFG, voice parties, clips, events and a staff area.
+  tags: [gaming]
+imports: ["builtin:common"]
+guild:
+  id: "${DISCORD_GUILD_ID}"
+
+roles:
+  - { key: admin, name: Admin, tier: admin, color: "#e74c3c", hoist: true, permissions: [ManageGuild, ManageRoles, ManageChannels, ManageMessages, ManageThreads, KickMembers, BanMembers, ModerateMembers, ViewAuditLog, MentionEveryone, ManageEvents, CreateEvents, MuteMembers, MoveMembers] }
+  - key: moderator
+    name: Moderator
+    tier: staff
+    color: "#2ecc71"
+    hoist: true
+    permissions: [ManageMessages, ManageThreads, KickMembers, ModerateMembers, ManageNicknames, MuteMembers, MoveMembers, ViewAuditLog, PinMessages]
+  - { key: event-host, name: Event Host, tier: staff, color: "#9b59b6", permissions: [CreateEvents, ManageEvents, MoveMembers, MentionEveryone] }
+  - { key: regular, name: Regular, tier: member, color: "#95a5a6", permissions: [] }
+  - { key: events-ping, name: Events Ping, tier: member, mentionable: false, permissions: [] }
+
+categories:
+  - key: info
+    name: "📌 INFO"
+    preset: read-only
+    channels:
+      - { key: rules, name: "rules", topic: "Server rules." }
+      - key: announcements
+        name: "announcements"
+        preset: announcements
+        permissions: { admin: { SendMessages: allow }, moderator: { SendMessages: allow } }
+      - key: events
+        name: "events"
+        preset: announcements
+        permissions: { event-host: { SendMessages: allow }, admin: { SendMessages: allow } }
+
+  - key: community
+    name: "💬 COMMUNITY"
+    channels:
+      - { key: general, name: "general", preset: public-chat }
+      - { key: clips, name: "clips", topic: "Highlights and screenshots.", slowmode: 10s }
+      - { key: off-topic, name: "off-topic" }
+
+  - key: play
+    name: "🎮 PLAY"
+    channels:
+      - { key: lfg, name: "looking-for-group", topic: "Post game, region, rank and party size.", slowmode: 30s }
+      - { key: party-1, name: "Party 1", preset: public-voice, userLimit: 6 }
+      - { key: party-2, name: "Party 2", preset: public-voice, userLimit: 6 }
+      - { key: event-stage, name: "Event Stage", type: stage, fallbackType: voice }
+
+  - key: feedback
+    name: "🗳️ FEEDBACK"
+    channels:
+      - key: suggestions
+        name: "suggestions"
+        preset: public-forum
+        requireTag: true
+        guidelines: "One suggestion per post. Upvote with 👍 instead of duplicating."
+        tags:
+          - { name: Idea, emoji: "💡" }
+          - { name: Server, emoji: "🏠" }
+          - { name: Events, emoji: "📅" }
+          - { name: Done, emoji: "✅", moderated: true }
+
+  - key: staff
+    name: "🛡️ STAFF"
+    preset: staff-only
+    visibleTo: [admin, moderator]
+    channels:
+      - { key: staff-chat, name: "staff-chat", visibleTo: [event-host] }
+      - { key: mod-log, name: "mod-log" }
+
+onboarding:
+  defaultChannels: [rules, announcements, general, lfg]
+  prompts:
+    - title: "Want event notifications?"
+      singleSelect: true
+      options:
+        - { title: "Yes, ping me for events", emoji: "📣", roles: [events-ping], channels: [events] }
+        - { title: "No thanks", emoji: "🔕" }

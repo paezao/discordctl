@@ -1,0 +1,342 @@
+# Blastorama — browser-based multiplayer arena FPS where the rules change mid-match.
+#
+# Channel naming convention: emoji╺╸channel-name
+#
+#   export DISCORD_GUILD_ID=<your test server id>
+#   discordctl validate --config examples/blastorama/discord.yaml
+#   discordctl plan     --config examples/blastorama/discord.yaml
+#
+# Nothing is applied without `discordctl apply` and an explicit confirmation.
+version: 1
+
+metadata:
+  name: Blastorama
+  description: Community server for Blastorama, the arena FPS where the rules change mid-match.
+  tags: [gaming, fps, playtesting]
+
+imports:
+  - builtin:common
+
+guild:
+  id: "${DISCORD_GUILD_ID}"
+
+options:
+  manageRoleOrder: true
+  manageChannelOrder: true
+  # Keep permission overwrites added by other bots/integrations (e.g. a logging bot).
+  overwritePolicy: merge
+
+# Safe defaults for every member. No moderation or management permissions,
+# no @everyone mentions.
+everyone:
+  permissions:
+    - ViewChannel
+    - CreateInstantInvite
+    - ChangeNickname
+    - SendMessages
+    - SendMessagesInThreads
+    - CreatePublicThreads
+    - EmbedLinks
+    - AttachFiles
+    - AddReactions
+    - UseExternalEmojis
+    - UseExternalStickers
+    - ReadMessageHistory
+    - UseApplicationCommands
+    - Connect
+    - Speak
+    - Stream
+    - UseVAD
+    - UseEmbeddedActivities
+    - UseSoundboard
+    - SendVoiceMessages
+    - SendPolls
+
+# Listed highest first: this order is applied as the role hierarchy.
+roles:
+  - key: admin
+    name: Admin
+    tier: admin
+    color: "#e74c3c"
+    hoist: true
+    # Deliberately not Administrator: explicit permissions keep the bot's required
+    # permissions minimal and stay subject to channel overwrites. Replace the list with
+    # [Administrator] if you want full bypass (the bot then needs Administrator too).
+    permissions:
+      - ManageGuild
+      - ManageRoles
+      - ManageChannels
+      - ManageWebhooks
+      - ManageGuildExpressions
+      - ManageEvents
+      - CreateEvents
+      - ManageThreads
+      - ManageMessages
+      - PinMessages
+      - ManageNicknames
+      - KickMembers
+      - BanMembers
+      - ModerateMembers
+      - ViewAuditLog
+      - MentionEveryone
+      - MuteMembers
+      - DeafenMembers
+      - MoveMembers
+
+  - key: developer
+    name: Developer
+    tier: staff
+    color: "#3498db"
+    hoist: true
+    # No Administrator: developers publish updates and run events, nothing more.
+    permissions:
+      - CreateEvents
+      - ManageEvents
+      - ManageThreads
+      - PinMessages
+      - MentionEveryone
+
+  - key: moderator
+    name: Moderator
+    tier: staff
+    color: "#2ecc71"
+    hoist: true
+    permissions:
+      - ManageMessages
+      - PinMessages
+      - ManageThreads
+      - ModerateMembers
+      - KickMembers
+      - BanMembers
+      - ManageNicknames
+      - MuteMembers
+      - DeafenMembers
+      - MoveMembers
+      - ViewAuditLog
+      - MentionEveryone
+
+  - key: playtester
+    name: Playtester
+    tier: member
+    color: "#f1c40f"
+    permissions: []
+
+  # Opt-in notification roles. Not mentionable by members; staff ping them via
+  # MentionEveryone, so they cannot be abused for spam.
+  - key: event-ping
+    name: Event Ping
+    tier: member
+    mentionable: false
+    permissions: []
+
+  - key: update-ping
+    name: Update Ping
+    tier: member
+    mentionable: false
+    permissions: []
+
+presets:
+  lab-forum:
+    type: forum
+    sortOrder: latest_activity
+    layout: list
+    requireTag: true
+    defaultReaction: "👍"
+    defaultAutoArchive: 1w
+    defaultThreadSlowmode: 10s
+
+categories:
+  # ------------------------------------------------------------------ START HERE
+  - key: start-here
+    name: "📢  START HERE"
+    preset: read-only
+    channels:
+      - key: rules
+        name: "📜╺╸rules"
+        topic: "Server rules. Read before posting. Breaking them gets you timed out or banned."
+        expect:
+          view: [everyone]
+          noSend: [everyone, playtester, developer]
+
+      - key: announcements
+        name: "📣╺╸announcements"
+        preset: announcements
+        topic: "Official Blastorama news. Follow this channel to get it in your own server."
+        permissions:
+          admin: { SendMessages: allow, SendMessagesInThreads: allow }
+          moderator: { SendMessages: allow, SendMessagesInThreads: allow }
+        expect:
+          send: [admin, moderator]
+          noSend: [everyone, playtester, developer]
+
+      - key: dev-updates
+        name: "📰╺╸dev-updates"
+        preset: announcements
+        topic: "Patch notes, devlogs and rule-mutator previews straight from the developers."
+        permissions:
+          admin: { SendMessages: allow, SendMessagesInThreads: allow }
+          developer: { SendMessages: allow, SendMessagesInThreads: allow }
+        expect:
+          send: [developer, admin]
+          noSend: [everyone, playtester, moderator]
+
+  # ------------------------------------------------------------------ COMMUNITY
+  - key: community
+    name: "💬 COMMUNITY"
+    channels:
+      - key: general
+        name: "💬╺╸general"
+        topic: "General chat about anything Blastorama. Keep it friendly."
+        expect:
+          send: [everyone]
+
+      - key: clips-and-screenshots
+        name: "📸╺╸clips-and-screenshots"
+        topic: "Your best frags, wildest rule changes and funniest fails. Media only, discuss in threads."
+        slowmode: 10s
+
+  # ------------------------------------------------------------------ PLAY BLASTORAMA
+  - key: play
+    name: "🎮 PLAY BLASTORAMA"
+    channels:
+      - key: looking-for-game
+        name: "🔎╺╸looking-for-game"
+        topic: "Find a squad. Post your region, mode and party size."
+        slowmode: 30s
+
+      - key: game-discussion
+        name: "🎯╺╸game-discussion"
+        topic: "Strategies, loadouts, maps and the rule mutators that keep changing everything."
+
+      - key: party-1
+        name: "🔊╺╸party-1"
+        preset: public-voice
+        userLimit: 8
+
+      - key: party-2
+        name: "🔊╺╸party-2"
+        preset: public-voice
+        userLimit: 8
+
+  # ------------------------------------------------------------------ THE LAB
+  - key: the-lab
+    name: "🧪 THE LAB"
+    channels:
+      - key: suggestions
+        name: "💡╺╸suggestions"
+        preset: [public-forum, lab-forum]
+        guidelines: |
+          One idea per post. Search first and upvote existing ideas with 👍 instead of reposting.
+          Use a clear title ("Rule mutator: low gravity rounds") and tag the area it affects.
+          Staff mark posts as Accepted, Planned or Declined.
+        tags:
+          - { name: Gameplay, emoji: "🎮" }
+          - { name: Weapons, emoji: "🔫" }
+          - { name: Maps, emoji: "🗺️" }
+          - { name: Rule Mutators, emoji: "🎲" }
+          - { name: Modes, emoji: "🏁" }
+          - { name: UI/UX, emoji: "🖥️" }
+          - { name: Accepted, emoji: "✅", moderated: true }
+          - { name: Planned, emoji: "📅", moderated: true }
+          - { name: Declined, emoji: "❌", moderated: true }
+
+      - key: bug-reports
+        name: "🐛╺╸bug-reports"
+        preset: [public-forum, lab-forum]
+        guidelines: |
+          One bug per post. Include: what happened, what you expected, steps to reproduce,
+          browser + OS, region/server, and the active rule mutators. Clips help a lot.
+          Staff tag posts as Confirmed, Fixed or Can't Reproduce.
+        tags:
+          - { name: Gameplay, emoji: "🎮" }
+          - { name: Netcode, emoji: "📡" }
+          - { name: Performance, emoji: "🐢" }
+          - { name: Graphics, emoji: "🎨" }
+          - { name: Audio, emoji: "🔈" }
+          - { name: UI, emoji: "🖥️" }
+          - { name: Crash, emoji: "💥" }
+          - { name: Confirmed, emoji: "📌", moderated: true }
+          - { name: Fixed, emoji: "✅", moderated: true }
+          - { name: "Can't Reproduce", emoji: "❔", moderated: true }
+        postTemplate: |
+          **What happened:**
+          **Expected:**
+          **Steps to reproduce:** 1. 2. 3.
+          **Browser / OS:**
+          **Region / server:**
+          **Active rule mutators:**
+          **Clip or screenshot:**
+
+      - key: playtest-feedback
+        name: "🧪╺╸playtest-feedback"
+        preset: [public-forum, lab-forum]
+        guidelines: |
+          Feedback from playtest sessions. Name the build or session date in the title.
+          Tell us what felt fun, what felt unfair, and which rule changes surprised you.
+        tags:
+          - { name: Balance, emoji: "⚖️" }
+          - { name: Fun Factor, emoji: "🎉" }
+          - { name: Rule Mutators, emoji: "🎲" }
+          - { name: Maps, emoji: "🗺️" }
+          - { name: Onboarding, emoji: "🧭" }
+          - { name: Performance, emoji: "🐢" }
+          - { name: Reviewed, emoji: "👀", moderated: true }
+
+  # ------------------------------------------------------------------ STAFF ONLY
+  - key: staff
+    name: "🛡️ STAFF ONLY"
+    preset: staff-only
+    visibleTo: [admin, developer, moderator]
+    expect:
+      view: [admin, developer, moderator]
+      noView: [everyone, playtester, event-ping, update-ping]
+    channels:
+      - key: staff-chat
+        name: "💬╺╸staff-chat"
+        topic: "Private coordination between admins, developers and moderators."
+        expect:
+          view: [moderator, developer]
+          noView: [everyone, playtester]
+
+      - key: mod-alerts
+        name: "🚨╺╸mod-alerts"
+        topic: "Automated alerts and reports that need a moderator's attention."
+        expect:
+          view: [moderator, admin]
+          noView: [everyone, playtester]
+
+      - key: mod-logs
+        name: "📋╺╸mod-logs"
+        topic: "Moderation log. Written by logging bots; humans read and discuss in threads."
+        permissions:
+          moderator: { SendMessages: deny }
+          developer: { SendMessages: deny }
+        expect:
+          view: [moderator, admin]
+          noView: [everyone, playtester]
+
+      - key: staff-lounge
+        name: "🔊╺╸staff-lounge"
+        type: voice
+        expect:
+          connect: [moderator, developer]
+          noView: [everyone, playtester]
+
+# Suggested onboarding (applied manually: requires Community; see `discordctl plan` output).
+onboarding:
+  enabled: false
+  defaultChannels: [rules, announcements, dev-updates, general, looking-for-game]
+  prompts:
+    - title: "What do you want to hear about?"
+      options:
+        - title: Game nights & tournaments
+          emoji: "🏆"
+          roles: [event-ping]
+          channels: [looking-for-game]
+        - title: Patch notes & dev updates
+          emoji: "🛠️"
+          roles: [update-ping]
+          channels: [dev-updates]
+        - title: Helping test new builds
+          emoji: "🧪"
+          channels: [playtest-feedback, bug-reports]

@@ -1,0 +1,89 @@
+# Open Source Project template.
+version: 1
+metadata:
+  name: Open Source Project
+  description: Support forum, contributor channels, release announcements and a maintainers area.
+  tags: [open-source, developer]
+imports: ["builtin:common"]
+guild:
+  id: "${DISCORD_GUILD_ID}"
+
+roles:
+  - { key: maintainer, name: Maintainer, tier: admin, color: "#e67e22", hoist: true, permissions: [ManageGuild, ManageRoles, ManageChannels, ManageMessages, ManageThreads, KickMembers, BanMembers, ModerateMembers, ViewAuditLog, MentionEveryone, ManageWebhooks] }
+  - { key: moderator, name: Moderator, tier: staff, color: "#2ecc71", hoist: true, permissions: [ManageMessages, ManageThreads, ModerateMembers, KickMembers, ViewAuditLog, PinMessages] }
+  - { key: contributor, name: Contributor, tier: member, color: "#3498db", hoist: true, permissions: [] }
+  - { key: release-ping, name: Release Ping, tier: member, permissions: [] }
+
+categories:
+  - key: welcome
+    name: "WELCOME"
+    preset: read-only
+    channels:
+      - { key: readme, name: "readme", topic: "What this project is, code of conduct, useful links." }
+      - key: releases
+        name: "releases"
+        preset: announcements
+        topic: "New versions and changelogs."
+        permissions: { maintainer: { SendMessages: allow } }
+
+  - key: community
+    name: "COMMUNITY"
+    channels:
+      - { key: general, name: "general" }
+      - { key: showcase, name: "showcase", preset: showcase-forum, guidelines: "Share what you built with the project." }
+
+  - key: support
+    name: "SUPPORT"
+    channels:
+      - key: help
+        name: "help"
+        preset: public-forum
+        requireTag: true
+        defaultReaction: "✅"
+        guidelines: |
+          Search existing posts and the docs first. Include version, OS, a minimal reproduction and full error output.
+        tags:
+          - { name: Question, emoji: "❓" }
+          - { name: Bug, emoji: "🐛" }
+          - { name: Install, emoji: "📦" }
+          - { name: Solved, emoji: "✅", moderated: true }
+        postTemplate: |
+          **Version:**
+          **OS / runtime:**
+          **What I tried:**
+          **Error output:**
+
+  - key: development
+    name: "DEVELOPMENT"
+    channels:
+      - { key: contributing, name: "contributing", topic: "Discuss PRs, design and good first issues." }
+      - key: rfcs
+        name: "rfcs"
+        preset: public-forum
+        guidelines: "Larger proposals. Link the RFC document and summarize motivation."
+        tags: [{ name: Draft }, { name: Accepted, moderated: true }, { name: Rejected, moderated: true }]
+      - { key: dev-voice, name: "Pairing", preset: public-voice }
+
+  - key: maintainers
+    name: "MAINTAINERS"
+    preset: staff-only
+    visibleTo: [maintainer, moderator]
+    channels:
+      - { key: maintainers-chat, name: "maintainers" }
+      # Maintainers only: does not inherit the category's moderator access.
+      - key: security
+        name: "security-reports"
+        topic: "Coordinated disclosure triage. Never discuss details publicly."
+        inheritPermissions: false
+        private: true
+        visibleTo: [maintainer]
+        expect: { view: [maintainer], noView: [everyone, moderator, contributor] }
+
+onboarding:
+  defaultChannels: [readme, releases, general, help]
+  prompts:
+    - title: "How do you use the project?"
+      options:
+        - { title: "I use it", emoji: "🧑‍💻", channels: [help] }
+        - { title: "I want to contribute", emoji: "🛠️", channels: [contributing, rfcs] }
+        - { title: "Notify me about releases", emoji: "🚀", roles: [release-ping] }

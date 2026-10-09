@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Validate shipped templates and examples
+        env:
+          DISCORD_GUILD_ID: "123456789012345678"
+        run: |
+          for f in templates/*.yaml examples/*/*.yaml; do
+            node dist/cli/main.js validate --strict --config "$f" --state "$RUNNER_TEMP/state.db"
+          done
+
+  # Real Discord integration tests run only when a maintainer provides a test server.
+  integration:
+    if: ${{ github.event_name == 'push' && vars.DISCORDCTL_IT_ENABLED == '1' }}
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+        env:
+          DISCORDCTL_IT_TOKEN: ${{ secrets.DISCORDCTL_IT_TOKEN }}
+          DISCORDCTL_IT_GUILD: ${{ secrets.DISCORDCTL_IT_GUILD }}
+          DISCORDCTL_IT_ALLOW_MUTATION: "1"

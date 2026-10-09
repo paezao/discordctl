@@ -1,0 +1,68 @@
+# Creator Community template (streamers, YouTubers, artists).
+version: 1
+metadata:
+  name: Creator Community
+  description: Fan community with content drops, supporter-only area, fan art gallery, stream voice and a mod area.
+  tags: [creator, streaming]
+imports: ["builtin:common"]
+guild:
+  id: "${DISCORD_GUILD_ID}"
+
+roles:
+  - { key: creator, name: Creator, tier: admin, color: "#e91e63", hoist: true, permissions: [ManageGuild, ManageRoles, ManageChannels, ManageMessages, ManageThreads, KickMembers, BanMembers, ModerateMembers, ViewAuditLog, MentionEveryone, ManageEvents, CreateEvents, MuteMembers, MoveMembers] }
+  - { key: moderator, name: Moderator, tier: staff, color: "#2ecc71", hoist: true, permissions: [ManageMessages, ManageThreads, ModerateMembers, KickMembers, BanMembers, ManageNicknames, MuteMembers, MoveMembers, ViewAuditLog] }
+  - { key: supporter, name: Supporter, tier: member, color: "#f1c40f", hoist: true, permissions: [] }
+  - { key: live-ping, name: Live Ping, tier: member, permissions: [] }
+
+categories:
+  - key: hub
+    name: "📢 HUB"
+    preset: read-only
+    channels:
+      - { key: rules, name: "rules" }
+      - key: new-content
+        name: "new-content"
+        preset: announcements
+        topic: "New videos, streams and drops."
+        permissions: { creator: { SendMessages: allow } }
+      - key: going-live
+        name: "going-live"
+        preset: announcements
+        permissions: { creator: { SendMessages: allow }, moderator: { SendMessages: allow } }
+
+  - key: fans
+    name: "💬 FANS"
+    channels:
+      - { key: chat, name: "chat", preset: public-chat }
+      - key: fan-art
+        name: "fan-art"
+        preset: showcase-forum
+        requireTag: true
+        guidelines: "Original work only; credit collaborators. NSFW is not allowed."
+        tags: [{ name: Art, emoji: "🎨" }, { name: Edit, emoji: "🎬" }, { name: Featured, emoji: "⭐", moderated: true }]
+      - { key: stream-voice, name: "Watch Party", preset: public-voice }
+
+  - key: supporters
+    name: "⭐ SUPPORTERS"
+    private: true
+    visibleTo: [supporter, creator, moderator]
+    channels:
+      - { key: supporter-chat, name: "supporter-chat" }
+      - { key: early-access, name: "early-access", preset: read-only, permissions: { creator: { SendMessages: allow } } }
+
+  - key: mods
+    name: "🛡️ MODS"
+    preset: staff-only
+    visibleTo: [creator, moderator]
+    channels:
+      - { key: mod-chat, name: "mod-chat" }
+      - { key: mod-log, name: "mod-log" }
+
+onboarding:
+  defaultChannels: [rules, new-content, chat]
+  prompts:
+    - title: "Get notified when I go live?"
+      singleSelect: true
+      options:
+        - { title: "Yes", emoji: "🔴", roles: [live-ping], channels: [going-live] }
+        - { title: "No", emoji: "🔕" }

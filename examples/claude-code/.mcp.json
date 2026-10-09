@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "discordctl": {
+      "command": "node",
+      "args": ["/absolute/path/to/discordctl/dist/mcp/main.js"],
+      "env": {
+        "DISCORD_TOKEN": "${DISCORD_TOKEN}",
+        "DISCORDCTL_ALLOWED_GUILDS": "${DISCORD_GUILD_ID}"
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+# Small Private Team template: invite-only workspace for a handful of people.
+version: 1
+metadata:
+  name: Small Private Team
+  description: Invite-only team space with projects, async updates, meetings voice and an admin area.
+  tags: [team, private]
+imports: ["builtin:common"]
+guild:
+  id: "${DISCORD_GUILD_ID}"
+
+# Members of a private team need no invite or moderation powers by default.
+everyone:
+  permissions: [ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, EmbedLinks, AttachFiles, AddReactions, ReadMessageHistory, UseExternalEmojis, UseApplicationCommands, Connect, Speak, Stream, UseVAD, ChangeNickname]
+
+roles:
+  - { key: owner, name: Owner, tier: admin, color: "#e74c3c", hoist: true, permissions: [ManageGuild, ManageRoles, ManageChannels, ManageMessages, ManageThreads, KickMembers, BanMembers, ViewAuditLog, CreateInstantInvite, MentionEveryone, ManageWebhooks] }
+  - { key: lead, name: Lead, tier: staff, color: "#3498db", hoist: true, permissions: [ManageMessages, ManageThreads, PinMessages, CreateInstantInvite, MentionEveryone, CreateEvents] }
+  - { key: member, name: Member, tier: member, color: "#95a5a6", permissions: [] }
+  - { key: guest, name: Guest, tier: member, color: "#bdc3c7", permissions: [] }
+
+categories:
+  - key: team
+    name: "TEAM"
+    permissions:
+      guest: { ViewChannel: deny }
+    channels:
+      - key: announcements
+        name: "announcements"
+        preset: read-only
+        permissions: { owner: { SendMessages: allow }, lead: { SendMessages: allow } }
+      - { key: general, name: "general" }
+      - { key: standup, name: "standup", topic: "Async daily updates: yesterday, today, blockers." }
+      - { key: meetings, name: "Meetings", preset: public-voice }
+
+  - key: projects
+    name: "PROJECTS"
+    permissions:
+      guest: { ViewChannel: deny }
+    channels:
+      - key: projects-forum
+        name: "projects"
+        preset: public-forum
+        guidelines: "One post per project or initiative. Keep status updates in the thread."
+        tags: [{ name: Active }, { name: Blocked }, { name: Done }]
+      - { key: links, name: "links-and-docs" }
+
+  - key: guests
+    name: "GUESTS"
+    channels:
+      - { key: guest-chat, name: "guest-chat", topic: "Shared with external collaborators." }
+
+  - key: admin
+    name: "ADMIN"
+    preset: staff-only
+    visibleTo: [owner, lead]
+    channels:
+      - { key: admin-chat, name: "admin" }

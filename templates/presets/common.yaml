@@ -1,0 +1,72 @@
+# Built-in preset library. Use it from a config with:
+#   imports: ["builtin:common"]
+# Presets are partial channel definitions merged under a channel's own fields.
+# They only reference @everyone, so they work with any role layout.
+version: 1
+metadata:
+  name: Common presets
+  description: Reusable channel behaviours for any server.
+presets:
+  # Members can read and react but not post or start threads.
+  read-only:
+    permissions:
+      everyone:
+        SendMessages: deny
+        SendMessagesInThreads: deny
+        CreatePublicThreads: deny
+        CreatePrivateThreads: deny
+        AddReactions: allow
+
+  # Announcement channel (followable). Falls back to a text channel on servers
+  # without the Community feature. Grant SendMessages to staff roles per channel.
+  announcements:
+    type: announcement
+    fallbackType: text
+    permissions:
+      everyone:
+        SendMessages: deny
+        SendMessagesInThreads: deny
+        CreatePublicThreads: deny
+        CreatePrivateThreads: deny
+        AddReactions: allow
+
+  # Public discussion with a gentle slowmode.
+  public-chat:
+    type: text
+    slowmode: 3s
+
+  # Forum where members create posts and reply.
+  public-forum:
+    type: forum
+    sortOrder: latest_activity
+    layout: list
+    defaultAutoArchive: 1w
+    permissions:
+      everyone:
+        SendMessages: allow
+        SendMessagesInThreads: allow
+
+  # Showcase / media feed: posts need an attachment-friendly gallery layout.
+  showcase-forum:
+    type: forum
+    layout: gallery
+    sortOrder: creation_date
+    permissions:
+      everyone:
+        SendMessages: allow
+        SendMessagesInThreads: allow
+        AttachFiles: allow
+        EmbedLinks: allow
+
+  # Hidden from @everyone; add `visibleTo: [roles]` alongside it.
+  staff-only:
+    private: true
+
+  # Voice channel open to everyone.
+  public-voice:
+    type: voice
+    permissions:
+      everyone:
+        Connect: allow
+        Speak: allow
+        Stream: allow

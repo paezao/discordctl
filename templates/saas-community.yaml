@@ -1,0 +1,74 @@
+# SaaS Community template.
+version: 1
+metadata:
+  name: SaaS Community
+  description: Customer community with product updates, support and feature-request forums, and a team-only area.
+  tags: [saas, product, support]
+imports: ["builtin:common"]
+guild:
+  id: "${DISCORD_GUILD_ID}"
+
+roles:
+  - { key: team-admin, name: Team Admin, tier: admin, color: "#c0392b", hoist: true, permissions: [ManageGuild, ManageRoles, ManageChannels, ManageMessages, ManageThreads, KickMembers, BanMembers, ModerateMembers, ViewAuditLog, MentionEveryone, ManageWebhooks] }
+  - { key: team, name: Team, tier: staff, color: "#2980b9", hoist: true, permissions: [ManageMessages, ManageThreads, PinMessages, MentionEveryone] }
+  - { key: support, name: Support, tier: staff, color: "#16a085", hoist: true, permissions: [ManageMessages, ManageThreads, ModerateMembers, PinMessages] }
+  - { key: customer, name: Customer, tier: member, color: "#7f8c8d", permissions: [] }
+  - { key: beta, name: Beta Tester, tier: member, color: "#f39c12", permissions: [] }
+
+categories:
+  - key: start
+    name: "START HERE"
+    preset: read-only
+    channels:
+      - { key: welcome, name: "welcome", topic: "How this community works and where to get help." }
+      - key: product-updates
+        name: "product-updates"
+        preset: announcements
+        permissions: { team: { SendMessages: allow }, team-admin: { SendMessages: allow } }
+      - { key: status, name: "status", topic: "Incidents and maintenance. Official status page is authoritative.", permissions: { support: { SendMessages: allow } } }
+
+  - key: community
+    name: "COMMUNITY"
+    channels:
+      - { key: general, name: "general", preset: public-chat }
+      - { key: show-and-tell, name: "show-and-tell", preset: showcase-forum }
+
+  - key: help
+    name: "HELP"
+    channels:
+      - key: support-forum
+        name: "support"
+        preset: public-forum
+        requireTag: true
+        guidelines: "Never post API keys, passwords or personal data. Account-specific issues: contact support privately."
+        tags: [{ name: Billing, emoji: "💳" }, { name: Integrations, emoji: "🔌" }, { name: Bug, emoji: "🐛" }, { name: How-to, emoji: "📘" }, { name: Resolved, emoji: "✅", moderated: true }]
+      - key: feature-requests
+        name: "feature-requests"
+        preset: public-forum
+        defaultReaction: "👍"
+        tags: [{ name: Requested }, { name: Planned, moderated: true }, { name: Shipped, moderated: true }]
+
+  - key: beta
+    name: "BETA PROGRAM"
+    private: true
+    visibleTo: [beta, team, support, team-admin]
+    channels:
+      - { key: beta-feedback, name: "beta-feedback", preset: public-forum, tags: [{ name: Feedback }, { name: Bug }] }
+
+  - key: team-area
+    name: "TEAM ONLY"
+    preset: staff-only
+    visibleTo: [team-admin, team, support]
+    channels:
+      - { key: team-chat, name: "team-chat" }
+      - { key: escalations, name: "escalations", topic: "Support escalations to engineering." }
+      - { key: mod-log, name: "mod-log" }
+
+onboarding:
+  defaultChannels: [welcome, product-updates, general, support-forum]
+  prompts:
+    - title: "What brings you here?"
+      options:
+        - { title: "I need help", emoji: "🆘", channels: [support-forum] }
+        - { title: "I have ideas", emoji: "💡", channels: [feature-requests] }
+        - { title: "Show off what I built", emoji: "✨", channels: [show-and-tell] }
