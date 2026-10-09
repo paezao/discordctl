@@ -70,7 +70,10 @@ function loadImports(imports: string[], options: LoadOptions, diagnostics: Diagn
   for (const spec of imports) {
     let file: string;
     if (spec.startsWith("builtin:")) {
-      file = join(BUILTIN_DIR, "presets", `${spec.slice("builtin:".length)}.yaml`);
+      const name = spec.slice("builtin:".length);
+      // Builtin names are plain identifiers; anything else could escape the presets directory.
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new ConfigError(`Invalid builtin import "${spec}"`, { hint: "Builtin libraries are named like builtin:common." });
+      file = join(BUILTIN_DIR, "presets", `${name}.yaml`);
     } else {
       const base = options.baseDir ?? process.cwd();
       file = isAbsolute(spec) ? spec : resolve(base, spec);

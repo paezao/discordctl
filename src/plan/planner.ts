@@ -549,6 +549,23 @@ export function createPlan(desired: DesiredState, snapshot: GuildSnapshot, mappi
         err("BOT_CANNOT_OVERWRITE", `The bot cannot set ${namesFromBits(missing).join(", ")} in overwrites on #${d.name} because it lacks ${missing === (missing & -missing) ? "that permission" : "those permissions"}`, `channels.${d.key}`,
           "Discord only allows bots to allow/deny permissions they hold. Grant them to the bot's role.");
       }
+      // Raw member / role-ID targets bypass the role model: validate them and rate grants made through them.
+      for (const o of d.overwrites) {
+        if (o.target.kind === "roleId" && !roleById.has(o.target.id)) {
+          err("UNKNOWN_ROLE_ID", `#${d.name} references role ID ${o.target.id}, which does not exist in this guild`, `channels.${d.key}`);
+        }
+        if (o.target.kind !== "member" && o.target.kind !== "roleId") continue;
+        const who = o.target.kind === "member" ? `member ${o.target.id}` : `role ${roleById.get(o.target.id)?.name ?? o.target.id}`;
+        if (d.private && has(o.allow, P.ViewChannel)) {
+          risk = maxRisk([risk, "high"]);
+          riskReasons.push(`grants ${who} access to private #${d.name}`);
+        }
+        const elevated = o.allow & ELEVATED_PERMISSIONS & ~P.ViewChannel;
+        if (elevated !== 0n) {
+          risk = maxRisk([risk, "high"]);
+          riskReasons.push(`grants ${who} ${namesFromBits(elevated).join(", ")} on #${d.name}`);
+        }
+      }
       // Exposing a private channel is high risk.
       if (d.private) {
         const ev = d.overwrites.find((o) => o.target.kind === "everyone");

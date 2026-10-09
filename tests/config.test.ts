@@ -169,3 +169,11 @@ categories:
     expect(desired.roles.map((r) => r.tier)).toEqual(["admin", "staff", "member"]);
   });
 });
+
+describe("import sandboxing", () => {
+  it("rejects builtin imports that escape the presets directory", () => {
+    const yaml = base + 'imports: ["builtin:../../../../etc/passwd"]\n';
+    expect(() => loadConfigText(yaml, { env, sandboxRoot: tmpdir() })).toThrow(/Invalid builtin import/);
+    expect(() => loadConfigText(yaml, { env })).toThrow(/Invalid builtin import/);
+  });
+});

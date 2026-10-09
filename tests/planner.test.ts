@@ -265,6 +265,26 @@ describe("destructive safeguards", () => {
     expect(p.diagnostics.some((d) => d.code === "LAST_ADMIN_PATH")).toBe(true);
   });
 
+  it("rates granting private-channel access to raw members/role IDs as high risk", async () => {
+    const { api, store } = setup();
+    const yaml = (target: string) => base + `categories:\n  - key: s\n    name: Staff\n    private: true\n    channels:\n      - key: c\n        name: secret\n        permissions: { "${target}": { view: allow } }\n`;
+    const member = (await plan(api, store, desiredFrom(yaml("member:555555555555555555")))).plan;
+    expect(member.ops.find((o) => o.key === "c")!.risk).toBe("high");
+    expect(member.ops.find((o) => o.key === "c")!.riskReasons.join()).toMatch(/private/);
+  });
+
+  it("rates elevated permissions granted through member overwrites as high risk", async () => {
+    const { api, store } = setup();
+    const p = (await plan(api, store, desiredFrom(base + 'channels: [{ key: c, name: c, permissions: { "member:555555555555555555": { ManageRoles: allow } } }]'))).plan;
+    expect(p.ops[0]!.risk).toBe("high");
+  });
+
+  it("rejects overwrites for role IDs that are not in the guild", async () => {
+    const { api, store } = setup();
+    const p = (await plan(api, store, desiredFrom(base + 'channels: [{ key: c, name: c, permissions: { "roleId:777777777777777777": { view: allow } } }]'))).plan;
+    expect(p.diagnostics.find((d) => d.code === "UNKNOWN_ROLE_ID")?.severity).toBe("error");
+  });
+
   it("rates permission escalation by risk", async () => {
     const { api, store } = setup();
     const { plan: p } = await plan(api, store, desiredFrom(base + "everyone: { permissions: [ViewChannel, ManageRoles] }"));
