@@ -1,6 +1,6 @@
 {
   "name": "discordctl",
-  "version": "0.1.1-beta.0",
+  "version": "0.2.0",
   "description": "Infrastructure as Code for Discord servers: declarative YAML, plan/apply, permission auditing, and an MCP server for AI agents.",
   "type": "module",
   "license": "Apache-2.0",
