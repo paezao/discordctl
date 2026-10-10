@@ -1,8 +1,6 @@
 import { createRequire } from "node:module";
 
-/**
- * Product naming lives here so the provisional name `discordctl` is easy to change.
- */
+/** Product naming, in one place. */
 export const PRODUCT_NAME = "discordctl";
 export const MCP_SERVER_NAME = "discordctl";
 /** Read from package.json (two levels up from both src/core and dist/core) so releases never drift. */

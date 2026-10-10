@@ -23,8 +23,6 @@ Plan for Blastorama (123456789012345678)
 Plan: 4 to create, 1 to update, 1 to move, 0 to delete.
 ```
 
-> `discordctl` is a provisional name. It is defined in one place (`src/core/constants.ts` and the `bin` entries in `package.json`).
-
 ## Features
 
 - **Declarative YAML** with Zod validation, line-numbered errors, presets, imports and templates — see [docs/configuration.md](docs/configuration.md).
