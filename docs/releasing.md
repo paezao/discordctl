@@ -15,22 +15,24 @@ The workflow then:
 1. checks the tag matches `package.json`,
 2. runs typecheck and tests,
 3. packs the package and smoke-tests the installed tarball,
-4. publishes to npm (`latest`, or `next` for versions like `0.2.0-beta.1`),
+4. **stages** the release on npm (`latest`, or `next` for versions like `0.2.0-beta.1`),
 5. creates a GitHub Release with generated notes and the `.tgz` attached.
+
+**Then approve it.** Staged versions are not installable until a maintainer approves them with 2FA:
+
+- npmjs.com → **discordctl** → **Staged Packages** → **Approve**, or
+- `npm stage list discordctl`, then `npm stage approve <stage-id>` (npm ≥ 11.15).
+
+The workflow run's summary page repeats these steps.
 
 While the configuration format may still change, stay on `0.x`: bump the minor version for breaking or notable changes and the patch version for fixes.
 
-## One-time setup
+## One-time setup (done)
 
-1. **npm account** with two-factor authentication: https://www.npmjs.com/signup
-2. **First publish.** npm can only attach a trusted publisher to a package that already exists, so the first release needs a token:
-   - npmjs.com → Access Tokens → Generate New Token → *Granular*, with read and write access to packages; restrict it to `discordctl` if offered, and give it a short expiry.
-   - GitHub repo → Settings → Secrets and variables → Actions → New secret `NPM_TOKEN`.
-   - Push the `v0.1.0` tag (`git tag v0.1.0 && git push origin v0.1.0`).
-3. **Switch to trusted publishing** (no long-lived secret):
-   - npmjs.com → the `discordctl` package → Settings → Trusted Publisher → GitHub Actions: owner `paezao`, repository `discordctl`, workflow `release.yml`, environment `npm`.
-   - Delete the `NPM_TOKEN` secret and revoke the token on npm.
-   - Optionally require trusted publishing only: package Settings → Publishing access → disallow tokens.
+1. npm account with two-factor authentication.
+2. First publish (v0.1.0) with a short-lived granular token stored as the `NPM_TOKEN` secret, because npm can only attach a trusted publisher to an existing package.
+3. Trusted publisher on npmjs.com → discordctl → Settings → Trusted Publisher → GitHub Actions: owner `paezao`, repository `discordctl`, workflow `release.yml`, environment `npm`. **Allowed actions: leave `npm publish` and `npm dist-tag` unchecked**, so CI can only stage releases.
+4. Revoke the token on npm and delete the `NPM_TOKEN` secret.
 
 Once the repository is public, trusted publishing also attaches provenance, so npm shows which commit and workflow built each version.
 

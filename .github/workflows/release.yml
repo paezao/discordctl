@@ -1,7 +1,9 @@
 name: Release
 
-# Publishes to npm and creates a GitHub Release when a version tag is pushed:
+# Stages an npm release and creates a GitHub Release when a version tag is pushed:
 #   npm version minor && git push --follow-tags
+# The version only becomes installable after a maintainer approves it with 2FA
+# (npm stage approve, or npmjs.com → discordctl → Staged Packages).
 # Tags with a pre-release suffix (v0.2.0-beta.1) publish under the npm "next" dist-tag.
 
 on:
@@ -28,7 +30,7 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # Trusted publishing needs npm >= 11.5.1.
+      # Staged publishing needs npm >= 11.15.0.
       - run: npm install -g npm@latest
 
       - name: Check tag matches package.json
@@ -56,16 +58,21 @@ jobs:
           "$prefix/bin/discordctl" init --template gaming-community --guild 123456789012345678 --output g.yaml
           "$prefix/bin/discordctl" validate --strict --config g.yaml --state ./state.db
 
-      # Authenticates with npm trusted publishing (no secret needed). For the very first
-      # publish, before a trusted publisher can be configured, set an NPM_TOKEN secret.
-      - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Authenticates with npm trusted publishing (OIDC, no stored secret). The trusted publisher
+      # only allows staging, so nothing ships without a maintainer's 2FA approval.
+      - name: Stage npm release
+        run: npm stage publish ./discordctl-*.tgz --tag "$DIST_TAG" --access public
+
+      - name: Approval instructions
         run: |
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          fi
-          npm publish ./discordctl-*.tgz --tag "$DIST_TAG" --access public
+          {
+            echo "### npm release staged: ${GITHUB_REF_NAME}"
+            echo ""
+            echo "It is **not installable yet**. Approve it with 2FA:"
+            echo ""
+            echo '- npmjs.com → discordctl → **Staged Packages** → **Approve**, or'
+            echo '- `npm stage list discordctl` then `npm stage approve <stage-id>`'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release
         env:
