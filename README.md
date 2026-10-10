@@ -1,5 +1,9 @@
 # discordctl
 
+[![npm](https://img.shields.io/npm/v/discordctl)](https://www.npmjs.com/package/discordctl)
+[![CI](https://github.com/paezao/discordctl/actions/workflows/ci.yml/badge.svg)](https://github.com/paezao/discordctl/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 **Infrastructure as Code for Discord servers.** Describe roles, categories, channels, forums and permissions in YAML, preview changes with `plan`, apply them safely with `apply`, detect drift with `audit` — from the terminal or through an MCP server that AI coding agents (Claude Code, OpenCode, …) can use.
 
 ```text
@@ -141,6 +145,10 @@ pnpm build
 ```
 
 Tests never touch Discord. `src/provider/fake.ts` emulates the behaviours discordctl relies on (role hierarchy, "can only grant what you have", name normalization, positions, Community-only types, forum tag IDs) and supports failure injection for rate limits and partial failures. An opt-in test against a real throwaway server lives in `tests/integration/` (see `.env.example`).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
