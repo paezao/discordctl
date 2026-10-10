@@ -9,7 +9,7 @@ export class OfflineApi implements DiscordApi {
     };
     for (const name of [
       "getCurrentUser", "listGuilds", "getGuild", "getGuildRoles", "getGuildChannels", "getGuildMember", "createRole", "modifyRole",
-      "modifyRolePositions", "deleteRole", "createChannel", "modifyChannel", "modifyChannelPositions", "deleteChannel", "modifyGuild",
+      "modifyRolePositions", "deleteRole", "createChannel", "modifyChannel", "modifyChannelPositions", "deleteChannel", "modifyGuild", "getGuildOnboarding", "modifyGuildOnboarding",
     ]) {
       (this as Record<string, unknown>)[name] = async () => fail();
     }

@@ -329,7 +329,6 @@ categories:
 
 # Suggested onboarding (applied manually: requires Community; see `discordctl plan` output).
 onboarding:
-  enabled: false
   defaultChannels: [rules, announcements, dev-updates, general, looking-for-game]
   prompts:
     - title: "What do you want to hear about?"

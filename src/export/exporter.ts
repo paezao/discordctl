@@ -145,6 +145,39 @@ export function exportConfig(s: GuildSnapshot, options: ExportOptions = {}): Exp
   const unsupported = s.channels.filter((c) => c.kind === "unsupported");
   if (unsupported.length) notes.push(`Skipped ${unsupported.length} channel(s) of unsupported types`);
 
+  // Onboarding (when it was fetched): exported as managed, so applying the export keeps it as-is.
+  let onboarding: Record<string, unknown> | undefined;
+  if (s.onboarding) {
+    const channelKeyById = new Map(bindings.filter((b) => b.kind === "channel").map((b) => [b.id, b.key]));
+    const keys = (ids: string[], map: Map<string, string>, what: string, where: string) =>
+      ids.flatMap((id) => {
+        const k = map.get(id);
+        if (!k) notes.push(`Onboarding ${where} references ${what} ${id}, which is not exported; it was left out`);
+        return k ? [k] : [];
+      });
+    const ob = s.onboarding;
+    onboarding = {
+      manage: true,
+      enabled: ob.enabled,
+      ...(ob.mode === 1 ? { mode: "advanced" } : {}),
+      defaultChannels: keys(ob.defaultChannelIds, channelKeyById, "channel", "default channels"),
+      prompts: ob.prompts.map((p) => ({
+        title: p.title,
+        ...(p.type === 1 ? { type: "dropdown" } : {}),
+        ...(p.singleSelect ? { singleSelect: true } : {}),
+        ...(p.required ? { required: true } : {}),
+        ...(!p.inOnboarding ? { inOnboarding: false } : {}),
+        options: p.options.map((o) => ({
+          title: o.title,
+          ...(o.description ? { description: o.description } : {}),
+          ...(o.emojiName ? { emoji: o.emojiName } : o.emojiId ? { emoji: o.emojiId } : {}),
+          ...(o.roleIds.length ? { roles: keys(o.roleIds, roleKeyById, "role", `answer "${o.title}"`) } : {}),
+          ...(o.channelIds.length ? { channels: keys(o.channelIds, channelKeyById, "channel", `answer "${o.title}"`) } : {}),
+        })),
+      })),
+    };
+  }
+
   const everyone = s.roles.find((r) => r.isEveryone);
   const config: Record<string, unknown> = {
     version: 1,
@@ -154,6 +187,7 @@ export function exportConfig(s: GuildSnapshot, options: ExportOptions = {}): Exp
     roles: roleEntries,
     categories,
     ...(topLevel.length ? { channels: topLevel } : {}),
+    ...(onboarding ? { onboarding } : {}),
   };
   if (everyone && (everyone.permissions & P.Administrator) !== 0n) notes.push("WARNING: @everyone has Administrator in this guild");
   const header = `# discordctl configuration exported from "${s.guild.name}"\n# Review before applying. Docs: docs/configuration.md\n`;

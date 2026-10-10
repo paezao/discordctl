@@ -338,9 +338,19 @@ export function resolveConfig(loaded: LoadedConfig, options: ResolveOptions = {}
   settingsRef("rulesChannel", ["text"]);
   settingsRef("publicUpdatesChannel", ["text"]);
 
-  // ---- onboarding (advisory)
+  // ---- onboarding: managed through the API when `manage: true`, otherwise printed as manual steps
+  let onboarding: DesiredState["onboarding"];
   if (config.onboarding) {
     const ob = config.onboarding;
+    const uniq = (list: string[], what: string) => {
+      const seen = new Set<string>();
+      for (const x of list.map((t) => t.toLowerCase())) {
+        if (seen.has(x)) err("DUPLICATE_ONBOARDING", `Duplicate onboarding ${what} "${x}" (titles identify ${what}s)`, "onboarding");
+        seen.add(x);
+      }
+    };
+    uniq(ob.prompts.map((p) => p.title), "question");
+    for (const p of ob.prompts) uniq(p.options.map((o) => o.title), "answer");
     for (const k of ob.defaultChannels) if (!channelByKey.has(k)) err("UNKNOWN_CHANNEL", `onboarding.defaultChannels references unknown channel "${k}"`, "onboarding");
     for (const prompt of ob.prompts) {
       for (const opt of prompt.options) {
@@ -350,9 +360,33 @@ export function resolveConfig(loaded: LoadedConfig, options: ResolveOptions = {}
     }
     const nameOf = (k: string) => channelByKey.get(k)?.name ?? k;
     const roleName = (k: string) => roles.find((r) => r.key === k)?.name ?? k;
-    manualSteps.push({
+    if (ob.manage) {
+      if (ob.enabled && ob.mode !== "advanced" && ob.defaultChannels.length < 7) {
+        err("ONBOARDING_TOO_FEW_CHANNELS", `Discord requires at least 7 default channels to enable onboarding (${ob.defaultChannels.length} configured)`, "onboarding.defaultChannels",
+          "Add default channels, or leave `enabled` unset to keep the current setting.");
+      }
+      onboarding = {
+        ...(ob.enabled !== undefined ? { enabled: ob.enabled } : {}),
+        ...(ob.mode !== undefined ? { mode: ob.mode === "advanced" ? 1 : 0 } : {}),
+        defaultChannels: ob.defaultChannels,
+        prompts: ob.prompts.map((p) => ({
+          title: p.title,
+          type: p.type === "dropdown" ? 1 : 0,
+          singleSelect: p.singleSelect,
+          required: p.required,
+          inOnboarding: p.inOnboarding,
+          options: p.options.map((o) => ({
+            title: o.title,
+            description: o.description ?? null,
+            ...(o.emoji ? parseEmoji(o.emoji) : { emojiId: null, emojiName: null }),
+            roles: o.roles,
+            channels: o.channels,
+          })),
+        })),
+      };
+    } else manualSteps.push({
       title: "Server onboarding",
-      reason: "Onboarding is applied manually in this version: it requires the Community feature and changes the new-member experience, so discordctl only documents the suggested setup.",
+      reason: "Onboarding is not managed by this config (set `onboarding.manage: true` to apply it through the API), so here is how to set it up by hand.",
       steps: [
         "Open Server Settings → Onboarding. (If you don't see it, enable Community first: Server Settings → Enable Community.)",
         `Under "Default Channels", select:\n${ob.defaultChannels.map((k) => `  - #${nameOf(k)}`).join("\n") || "  (none)"}`,
@@ -367,13 +401,14 @@ export function resolveConfig(loaded: LoadedConfig, options: ResolveOptions = {}
               })
               .join("\n"),
         ),
-        `Click "Preview" to check the new-member flow, then ${ob.enabled ? 'click "Enable Onboarding"' : "save it without enabling (the config has enabled: false; flip it when you're happy)"}.`,
+        `Click "Preview" to check the new-member flow, then ${ob.enabled === true ? 'click "Enable Onboarding"' : ob.enabled === false ? "save it without enabling (the config has enabled: false)" : "save it (leaving onboarding enabled or disabled as it is now)"}.`,
       ],
     });
   }
 
   const desired: DesiredState = {
     guildId,
+    ...(onboarding ? { onboarding } : {}),
     settings,
     everyone: everyonePerms !== undefined ? { permissions: everyonePerms } : {},
     roles,

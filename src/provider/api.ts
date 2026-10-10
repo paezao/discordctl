@@ -2,6 +2,7 @@ import type {
   APIChannel,
   APIGuild,
   APIGuildMember,
+  APIGuildOnboarding,
   APIRole,
   APIUser,
   RESTAPIPartialCurrentUserGuild,
@@ -12,6 +13,7 @@ import type {
   RESTPatchAPIGuildRolePositionsJSONBody,
   RESTPostAPIGuildChannelJSONBody,
   RESTPostAPIGuildRoleJSONBody,
+  RESTPutAPIGuildOnboardingJSONBody,
 } from "discord-api-types/v10";
 
 /**
@@ -40,4 +42,7 @@ export interface DiscordApi {
   deleteChannel(channelId: string, reason?: string): Promise<void>;
 
   modifyGuild(guildId: string, body: RESTPatchAPIGuildJSONBody, reason?: string): Promise<APIGuild>;
+
+  getGuildOnboarding(guildId: string): Promise<APIGuildOnboarding>;
+  modifyGuildOnboarding(guildId: string, body: RESTPutAPIGuildOnboardingJSONBody, reason?: string): Promise<APIGuildOnboarding>;
 }

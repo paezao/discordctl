@@ -17,6 +17,7 @@ import { ADMINISTRATIVE_PERMISSIONS, ELEVATED_PERMISSIONS, P, has, namesFromBits
 import { nameMatchKey, normalizeTextChannelName, compareSnowflakes } from "../util/names.js";
 import { hashValue } from "../util/hash.js";
 import { fingerprintSnapshot } from "./fingerprint.js";
+import { effectiveFor, modelFromDesired } from "../permissions/audit.js";
 import type {
   Binding,
   ChannelBody,
@@ -695,6 +696,119 @@ export function createPlan(desired: DesiredState, snapshot: GuildSnapshot, mappi
     });
   }
 
+  // ---- onboarding (only when the config manages it)
+  if (desired.onboarding) {
+    const ob = desired.onboarding;
+    const live = snapshot.onboarding;
+    if (!community) {
+      err("REQUIRES_COMMUNITY", "Onboarding requires the Community feature", "onboarding", "Enable Community in Server Settings, or set `onboarding.manage: false`.");
+    } else if (!live) {
+      throw new Error("Snapshot is missing onboarding; fetch it with { onboarding: true }");
+    } else {
+      if (!has(bot.permissions, P.ManageGuild) || !has(bot.permissions, P.ManageRoles)) {
+        err("BOT_MISSING_PERMISSION", "The bot needs Manage Server and Manage Roles to change onboarding", "onboarding");
+      }
+      const deps = new Set<string>();
+      const refFor = (kind: "role" | "channel", key: string): Ref => {
+        const r = kind === "role" ? roleRef(key) : channelRef(key);
+        if ("ref" in r) deps.add(`${kind}.create:${key}`);
+        return r;
+      };
+      const idOf = (r: Ref) => ("id" in r ? r.id : r.ref);
+      const usedPrompts = new Set<string>();
+      let synthetic = 0;
+      const prompts = ob.prompts.map((p) => {
+        const match = live.prompts.find((x) => !usedPrompts.has(x.id) && x.title.toLowerCase() === p.title.toLowerCase());
+        if (match) usedPrompts.add(match.id);
+        const usedOptions = new Set<string>();
+        return {
+          id: match?.id ?? newSnowflake(options.now ?? new Date(), synthetic++),
+          title: p.title, type: p.type, single_select: p.singleSelect, required: p.required, in_onboarding: p.inOnboarding,
+          options: p.options.map((o) => {
+            const m = match?.options.find((x) => !usedOptions.has(x.id) && x.title.toLowerCase() === o.title.toLowerCase());
+            if (m) usedOptions.add(m.id);
+            return {
+              ...(m ? { id: m.id } : {}),
+              title: o.title, description: o.description, emoji_id: o.emojiId, emoji_name: o.emojiName,
+              roles: o.roles.map((k) => refFor("role", k)), channels: o.channels.map((k) => refFor("channel", k)),
+            };
+          }),
+          matched: Boolean(match),
+        };
+      });
+      const removed = live.prompts.filter((x) => !usedPrompts.has(x.id));
+      const defaults = ob.defaultChannels.map((k) => refFor("channel", k));
+      const enabled = ob.enabled ?? live.enabled;
+      const mode = ob.mode ?? live.mode;
+
+      // Compare with names (not IDs) so the diff is readable and order-insensitive where Discord is.
+      const set = (ids: string[]) => [...ids].sort().join(",");
+      const promptKey = (p: { title: string; type: number; single_select: boolean; required: boolean; in_onboarding: boolean; options: Array<{ title: string; description: string | null; emoji_id: string | null; emoji_name: string | null; roleIds: string[]; channelIds: string[] }> }) =>
+        JSON.stringify([p.title, p.type, p.single_select, p.required, p.in_onboarding, p.options.map((o) => [o.title, o.description ?? null, o.emoji_id, o.emoji_name, set(o.roleIds), set(o.channelIds)])]);
+      const desiredKeys = prompts.map((p) => promptKey({ ...p, options: p.options.map((o) => ({ ...o, roleIds: o.roles.map(idOf), channelIds: o.channels.map(idOf) })) }));
+      const liveKeys = live.prompts.map((p) =>
+        promptKey({ title: p.title, type: p.type, single_select: p.singleSelect, required: p.required, in_onboarding: p.inOnboarding, options: p.options.map((o) => ({ title: o.title, description: o.description, emoji_id: o.emojiId, emoji_name: o.emojiName, roleIds: o.roleIds, channelIds: o.channelIds })) }),
+      );
+      const changes: FieldChange[] = [];
+      const reasons: string[] = [];
+      let risk: Risk = "low";
+      if (enabled !== live.enabled) {
+        changes.push({ field: "enabled", before: String(live.enabled), after: String(enabled) });
+        risk = maxRisk([risk, enabled ? "medium" : "high"]);
+        reasons.push(enabled ? "turns onboarding on for new members" : "turns onboarding off for new members");
+      }
+      if (mode !== live.mode) changes.push({ field: "mode", before: live.mode === 1 ? "advanced" : "default", after: mode === 1 ? "advanced" : "default" });
+      const channelLabel = (id: string) => `#${(channelMatches.find((m) => m.actual?.id === id || `channel:${m.desired.key}` === id)?.desired.name) ?? channelById.get(id)?.name ?? id}`;
+      if (set(defaults.map(idOf)) !== set(live.defaultChannelIds)) {
+        changes.push({ field: "defaultChannels", before: live.defaultChannelIds.map(channelLabel).join(", ") || "(none)", after: defaults.map(idOf).map(channelLabel).join(", ") || "(none)" });
+      }
+      prompts.forEach((p, i) => {
+        if (!p.matched) changes.push({ field: `question "${p.title}"`, before: null, after: `${p.options.length} answer(s)` });
+        else if (!liveKeys.includes(desiredKeys[i]!)) changes.push({ field: `question "${p.title}"`, before: "current", after: "updated answers/settings" });
+      });
+      for (const r of removed) {
+        changes.push({ field: `question "${r.title}"`, before: `${r.options.length} answer(s)`, after: null });
+        risk = maxRisk([risk, "medium"]);
+        reasons.push(`removes onboarding question "${r.title}" (not in the config)`);
+      }
+      if (changes.length === 0 && desiredKeys.join("\u0000") !== liveKeys.join("\u0000")) {
+        changes.push({ field: "questions", before: "current order", after: "configured order" });
+      }
+
+      // Discord rejects enabling onboarding in default mode without 7 default channels, 5 writable by @everyone.
+      if (enabled && mode === 0) {
+        const model = modelFromDesired(desired, snapshot);
+        const sendable = ob.defaultChannels.filter((k) => {
+          const ch = model.channels.find((c) => c.key === k);
+          return ch ? has(effectiveFor(model, ch, []), P.SendMessages) : false;
+        });
+        if (ob.defaultChannels.length < 7 || sendable.length < 5) {
+          err("ONBOARDING_CONSTRAINTS", `Enabled onboarding needs at least 7 default channels with at least 5 where @everyone can post; the config has ${ob.defaultChannels.length}, ${sendable.length} postable`,
+            "onboarding.defaultChannels",
+            ob.enabled === undefined
+              ? "Onboarding is currently enabled on the server (and `enabled` is unset, so it stays on): add default channels, or set `enabled: false`."
+              : "Add default channels, or remove `enabled: true`.");
+        }
+      }
+
+      if (changes.length > 0) {
+        add({
+          id: "onboarding.update", action: "update", resource: "onboarding", key: "onboarding", name: "server onboarding", changes,
+          payload: {
+            type: "onboarding.update",
+            body: {
+              ...(ob.enabled !== undefined ? { enabled: ob.enabled } : {}),
+              ...(ob.mode !== undefined ? { mode: ob.mode } : {}),
+              default_channels: defaults,
+              prompts: prompts.map(({ matched: _m, ...p }) => p),
+            },
+          },
+          dependsOn: [...deps], risk, riskReasons: reasons, destructive: false,
+        });
+      }
+    }
+  }
+
   // ---- orphans (tracked in state, removed from config)
   const desiredRoleKeys = new Set(desired.roles.map((r) => r.key));
   const desiredChannelKeys = new Set(allDesired.map((c) => c.key));
@@ -768,10 +882,16 @@ export function createPlan(desired: DesiredState, snapshot: GuildSnapshot, mappi
     manualSteps: desired.manualSteps,
     allowDelete: options.allowDelete ?? false,
     maxRisk: maxRisk(ops.map((o) => o.risk)),
+    snapshot: { onboarding: Boolean(desired.onboarding) },
   };
 }
 
 // ======================================================================== helpers
+
+/** A syntactically valid snowflake for new onboarding prompts; Discord assigns the real ID. */
+function newSnowflake(now: Date, n: number): string {
+  return (((BigInt(now.getTime()) - 1420070400000n) << 22n) + BigInt(n)).toString();
+}
 
 function channelNameKey(name: string, kind: ChannelKind): string {
   return kind === "category" || VOICE_LIKE_KINDS.has(kind) ? nameMatchKey(name) : nameMatchKey(normalizeTextChannelName(name));

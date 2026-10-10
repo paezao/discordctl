@@ -140,25 +140,35 @@ export const GuildSchema = z.strictObject({
 });
 
 export const OnboardingSchema = z.strictObject({
-  enabled: z.boolean().default(false),
+  /** Apply onboarding through the API. When false (default) it is only printed as manual steps. */
+  manage: z.boolean().default(false),
+  /** Omit to keep the server's current setting. */
+  enabled: z.boolean().optional(),
+  mode: z.enum(["default", "advanced"]).optional(),
   defaultChannels: z.array(z.string()).default([]),
   prompts: z
     .array(
       z.strictObject({
-        title: z.string(),
+        title: z.string().min(1).max(100),
+        type: z.enum(["multiple_choice", "dropdown"]).default("multiple_choice"),
         singleSelect: z.boolean().default(false),
         required: z.boolean().default(false),
-        options: z.array(
-          z.strictObject({
-            title: z.string(),
-            description: z.string().optional(),
-            emoji: z.string().optional(),
-            roles: z.array(z.string()).default([]),
-            channels: z.array(z.string()).default([]),
-          }),
-        ),
+        inOnboarding: z.boolean().default(true),
+        options: z
+          .array(
+            z.strictObject({
+              title: z.string().min(1).max(50),
+              description: z.string().max(100).optional(),
+              emoji: z.string().optional(),
+              roles: z.array(z.string()).default([]),
+              channels: z.array(z.string()).default([]),
+            }),
+          )
+          .min(1)
+          .max(50),
       }),
     )
+    .max(15)
     .default([]),
 });
 

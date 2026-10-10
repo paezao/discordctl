@@ -4,6 +4,7 @@ import type {
   APIChannel,
   APIGuild,
   APIGuildMember,
+  APIGuildOnboarding,
   APIRole,
   APIUser,
   RESTAPIPartialCurrentUserGuild,
@@ -121,6 +122,12 @@ export class RestDiscordApi implements DiscordApi {
   }
   modifyGuild(guildId: string, body: object, reason?: string) {
     return this.call<APIGuild>("PATCH", Routes.guild(guildId), () => this.rest.patch(Routes.guild(guildId), this.opts(reason, body)));
+  }
+  getGuildOnboarding(guildId: string) {
+    return this.call<APIGuildOnboarding>("GET", Routes.guildOnboarding(guildId), () => this.rest.get(Routes.guildOnboarding(guildId)));
+  }
+  modifyGuildOnboarding(guildId: string, body: object, reason?: string) {
+    return this.call<APIGuildOnboarding>("PUT", Routes.guildOnboarding(guildId), () => this.rest.put(Routes.guildOnboarding(guildId), this.opts(reason, body)));
   }
 }
 

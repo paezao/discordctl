@@ -7,6 +7,7 @@ discordctl only automates what Discord's official bot API supports and what can 
 | Resource | Managed fields |
 | --- | --- |
 | Server | name, description (Community), verification level, default notifications, explicit content filter, AFK timeout/channel, system channel, rules and public-updates channels (Community) |
+| Onboarding (`manage: true`, Community) | enabled, mode, default channels, questions and answers with roles, channels, emoji and descriptions |
 | @everyone | guild-level permissions |
 | Roles | name, color, hoist, mentionable, permissions, hierarchy order |
 | Categories | name, order, permission overwrites |
@@ -19,7 +20,7 @@ discordctl only automates what Discord's official bot API supports and what can 
 | Feature | Why | What to do |
 | --- | --- | --- |
 | **Enabling Community** | Changes server-wide policies and requires accepting Discord's guidelines. | Server Settings → Enable Community. Then re-run `plan`: channels with `fallbackType` are upgraded in place. |
-| **Onboarding** (`onboarding:` block) | Requires Community and reshapes the new-member flow; discordctl v1 documents the suggested prompts instead of writing them. | `plan` and `apply` print click-by-click instructions: default channels, each question and its answers with roles and channels. |
+| **Onboarding** (`onboarding:` without `manage: true`) | Opt-in, because it reshapes the new-member flow and replaces all questions on every update. | `plan` and `apply` print click-by-click instructions. Set `manage: true` to apply it through the API instead (requires Community); see configuration.md. |
 | **Forum post templates** (`postTemplate:`) | No API field exists. discordctl does not post messages. | Create and pin a post; the template text is printed ready to copy. |
 | **Server icon, banner, splash** | Binary assets; out of scope. | Server Settings → Overview. |
 

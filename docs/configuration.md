@@ -13,7 +13,7 @@ roles: [...]
 presets: { name: {...} }
 categories: [...]
 channels: [...]        # channels outside any category
-onboarding: {...}      # advisory, see limitations.md
+onboarding: {...}      # printed as manual steps, or applied with manage: true
 ```
 
 ## Semantics
@@ -136,6 +136,33 @@ expect:
 ```
 
 Each entry simulates a member holding `@everyone` plus that role.
+
+## onboarding
+
+```yaml
+onboarding:
+  manage: true             # apply through the API; false (default) = print click-by-click steps instead
+  enabled: true            # omit to keep the server's current setting
+  mode: default            # default | advanced (omit to keep)
+  defaultChannels: [rules, announcements, general, looking-for-game, game-discussion, clips, memes]
+  prompts:
+    - title: What do you want to hear about?
+      type: multiple_choice  # or dropdown
+      singleSelect: false
+      required: false
+      inOnboarding: true     # false = only under Channels & Roles
+      options:
+        - { title: Game nights, emoji: "🏆", description: Weekly tournaments, roles: [event-ping], channels: [looking-for-game] }
+```
+
+With `manage: true`:
+
+- Requires the **Community** feature and gives the bot's required permissions **Manage Server** (plus Manage Roles).
+- Questions and answers are matched to the live ones **by title**, so Discord keeps their IDs. Renaming a title replaces that question or answer.
+- The config is **authoritative for questions**: Discord replaces all prompts on every update, so live questions missing from the config are removed. The plan lists each one as a medium-risk change.
+- Turning onboarding **off** is high risk, turning it on medium. Leave `enabled` unset to never change it.
+- Discord's rule for enabled onboarding in default mode (at least 7 default channels, 5 of them postable by @everyone) is checked against the permissions the plan will produce, before anything is sent.
+- `export` includes the live onboarding with `manage: true`, so you can start from what members see today.
 
 ## presets and imports
 

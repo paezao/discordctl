@@ -99,11 +99,40 @@ export interface BotIdentity {
   isOwner: boolean;
 }
 
+export interface ActualOnboardingOption {
+  id: Snowflake;
+  title: string;
+  description: string | null;
+  emojiId: Snowflake | null;
+  emojiName: string | null;
+  roleIds: Snowflake[];
+  channelIds: Snowflake[];
+}
+
+export interface ActualOnboardingPrompt {
+  id: Snowflake;
+  title: string;
+  type: number;
+  singleSelect: boolean;
+  required: boolean;
+  inOnboarding: boolean;
+  options: ActualOnboardingOption[];
+}
+
+export interface ActualOnboarding {
+  enabled: boolean;
+  mode: number;
+  defaultChannelIds: Snowflake[];
+  prompts: ActualOnboardingPrompt[];
+}
+
 export interface GuildSnapshot {
   guild: ActualGuild;
   roles: ActualRole[];
   channels: ActualChannel[];
   bot: BotIdentity;
+  /** Only fetched when a configuration manages onboarding. */
+  onboarding?: ActualOnboarding;
   fetchedAt: string;
 }
 
@@ -217,8 +246,37 @@ export interface DesiredOptions {
   manageChannelOrder: boolean;
 }
 
+export interface DesiredOnboardingOption {
+  title: string;
+  description: string | null;
+  emojiId: Snowflake | null;
+  emojiName: string | null;
+  roles: string[];
+  channels: string[];
+}
+
+export interface DesiredOnboardingPrompt {
+  title: string;
+  type: number;
+  singleSelect: boolean;
+  required: boolean;
+  inOnboarding: boolean;
+  options: DesiredOnboardingOption[];
+}
+
+/** Onboarding managed through the API (`onboarding.manage: true`). */
+export interface DesiredOnboarding {
+  /** Undefined keeps the server's current value. */
+  enabled?: boolean;
+  mode?: number;
+  /** Channel keys. */
+  defaultChannels: string[];
+  prompts: DesiredOnboardingPrompt[];
+}
+
 export interface DesiredState {
   guildId: Snowflake;
+  onboarding?: DesiredOnboarding;
   settings: DesiredGuildSettings;
   everyone: { permissions?: bigint };
   roles: DesiredRole[];

@@ -1,5 +1,5 @@
-import { ChannelType, type APIChannel, type APIGuild, type APIRole, type APIOverwrite } from "discord-api-types/v10";
-import type { ActualChannel, ActualGuild, ActualRole, BotIdentity, ChannelKind, GuildSnapshot, Overwrite } from "../core/model.js";
+import { ChannelType, type APIChannel, type APIGuild, type APIGuildOnboarding, type APIRole, type APIOverwrite } from "discord-api-types/v10";
+import type { ActualChannel, ActualGuild, ActualOnboarding, ActualRole, BotIdentity, ChannelKind, GuildSnapshot, Overwrite } from "../core/model.js";
 import type { DiscordApi } from "./api.js";
 import { ALL_PERMISSIONS, P, has, parseBits } from "../permissions/flags.js";
 
@@ -106,8 +106,30 @@ export function normalizeGuild(g: APIGuild): ActualGuild {
   };
 }
 
+export function normalizeOnboarding(o: APIGuildOnboarding): ActualOnboarding {
+  return {
+    enabled: o.enabled,
+    mode: o.mode,
+    defaultChannelIds: [...o.default_channel_ids].sort(),
+    // Prompt and option order is meaningful (it is the display order) and kept as returned.
+    prompts: o.prompts.map((p) => ({
+      id: p.id, title: p.title, type: p.type, singleSelect: p.single_select, required: p.required, inOnboarding: p.in_onboarding,
+      options: p.options.map((opt) => ({
+        id: opt.id, title: opt.title, description: opt.description ?? null,
+        emojiId: opt.emoji?.id ?? null, emojiName: opt.emoji?.name ?? null,
+        roleIds: [...opt.role_ids].sort(), channelIds: [...opt.channel_ids].sort(),
+      })),
+    })),
+  };
+}
+
+export interface SnapshotOptions {
+  /** Also fetch onboarding (only needed when a configuration manages it). */
+  onboarding?: boolean;
+}
+
 /** Fetch and normalize everything discordctl needs to reason about a guild. */
-export async function fetchSnapshot(api: DiscordApi, guildId: string): Promise<GuildSnapshot> {
+export async function fetchSnapshot(api: DiscordApi, guildId: string, options: SnapshotOptions = {}): Promise<GuildSnapshot> {
   const me = await api.getCurrentUser();
   const [guildRaw, rolesRaw, channelsRaw, member] = await Promise.all([
     api.getGuild(guildId),
@@ -119,7 +141,9 @@ export async function fetchSnapshot(api: DiscordApi, guildId: string): Promise<G
   const roles = rolesRaw.map((r) => normalizeRole(r, guildId)).sort((a, b) => b.position - a.position || a.id.localeCompare(b.id));
   const channels = channelsRaw.map(normalizeChannel);
   const bot = computeBotIdentity(me.id, me.username, member.roles, roles, guild.ownerId === me.id, guildId);
-  return { guild, roles, channels, bot, fetchedAt: new Date().toISOString() };
+  const snapshot: GuildSnapshot = { guild, roles, channels, bot, fetchedAt: new Date().toISOString() };
+  if (options.onboarding) snapshot.onboarding = normalizeOnboarding(await api.getGuildOnboarding(guildId));
+  return snapshot;
 }
 
 export function computeBotIdentity(userId: string, username: string, roleIds: string[], roles: ActualRole[], isOwner: boolean, guildId: string): BotIdentity {

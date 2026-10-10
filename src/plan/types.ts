@@ -11,7 +11,7 @@ import type { ResourceKind } from "../state/store.js";
 export type Ref = { id: string } | { ref: string };
 
 export type OpAction = "create" | "update" | "move" | "delete" | "import";
-export type OpResource = "guild" | "everyone" | "role" | "role-order" | "category" | "channel" | "channel-order";
+export type OpResource = "guild" | "everyone" | "role" | "role-order" | "category" | "channel" | "channel-order" | "onboarding";
 export type Risk = "low" | "medium" | "high" | "critical";
 
 export interface FieldChange {
@@ -89,7 +89,31 @@ export type OpPayload =
   | { type: "channel.import"; channelId: string }
   | { type: "channel.delete"; channelId: string }
   | { type: "channels.reorder"; parent: Ref | null; sortClass: "category" | "text" | "voice"; order: Ref[] }
-  | { type: "guild.update"; body: GuildBody };
+  | { type: "guild.update"; body: GuildBody }
+  | { type: "onboarding.update"; body: OnboardingBody };
+
+export interface OnboardingBody {
+  enabled?: boolean;
+  mode?: number;
+  default_channels: Ref[];
+  prompts: Array<{
+    id: string;
+    title: string;
+    type: number;
+    single_select: boolean;
+    required: boolean;
+    in_onboarding: boolean;
+    options: Array<{
+      id?: string;
+      title: string;
+      description: string | null;
+      emoji_id: string | null;
+      emoji_name: string | null;
+      roles: Ref[];
+      channels: Ref[];
+    }>;
+  }>;
+}
 
 export interface PlanOp {
   id: string;
@@ -141,6 +165,8 @@ export interface Plan {
   manualSteps: ManualStep[];
   allowDelete: boolean;
   maxRisk: Risk;
+  /** Extra state the fingerprint covers; apply must fetch the same to compare. */
+  snapshot: { onboarding: boolean };
 }
 
 export const RISK_ORDER: Record<Risk, number> = { low: 0, medium: 1, high: 2, critical: 3 };

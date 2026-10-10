@@ -1,4 +1,4 @@
-import { ChannelType, type APIChannel, type APIGuild, type APIGuildMember, type APIRole, type APIUser } from "discord-api-types/v10";
+import { ChannelType, type APIChannel, type APIGuild, type APIGuildMember, type APIGuildOnboarding, type APIRole, type APIUser } from "discord-api-types/v10";
 import type { DiscordApi } from "./api.js";
 import { DiscordApiError } from "../util/errors.js";
 import { ALL_PERMISSIONS, P, SAFE_EVERYONE_DEFAULTS, has, parseBits } from "../permissions/flags.js";
@@ -28,6 +28,7 @@ interface FakeGuildState {
   roles: Json[];
   channels: Json[];
   members: Map<string, string[]>;
+  onboarding: Json;
 }
 
 export interface FakeCall {
@@ -80,6 +81,7 @@ export class FakeDiscord implements DiscordApi {
       roles: [everyone, botRole],
       channels: [],
       members: new Map([[this.botUser.id, [botRoleId]]]),
+      onboarding: { guild_id: init.id, prompts: [], default_channel_ids: [], enabled: false, mode: 0 },
     };
     this.guilds.set(init.id, state);
     return state;
@@ -358,6 +360,63 @@ export class FakeDiscord implements DiscordApi {
     this.requirePerm(s, P.ManageGuild);
     for (const [k, v] of Object.entries(body)) if (v !== undefined) s.guild[k] = v;
     return structuredClone({ ...s.guild, roles: s.roles }) as unknown as APIGuild;
+  }
+
+  // ---- onboarding -------------------------------------------------------------------
+
+  async getGuildOnboarding(guildId: string): Promise<APIGuildOnboarding> {
+    this.record("getGuildOnboarding", [guildId]);
+    const s = this.g(guildId);
+    const ob = structuredClone(s.onboarding);
+    // Question order is the display order and is preserved; the default channel list is a set.
+    ob.default_channel_ids = rotate(ob.default_channel_ids as string[], ++this.reads);
+    return ob as unknown as APIGuildOnboarding;
+  }
+
+  async modifyGuildOnboarding(guildId: string, body: Json): Promise<APIGuildOnboarding> {
+    this.record("modifyGuildOnboarding", [guildId, body]);
+    const s = this.g(guildId);
+    this.requirePerm(s, P.ManageGuild | P.ManageRoles);
+    if (!(s.guild.features as string[]).includes("COMMUNITY")) {
+      throw new DiscordApiError({ status: 403, discordCode: 50001, message: "Onboarding requires the Community feature", retryable: false, ambiguous: false });
+    }
+    const channelIds = new Set(s.channels.map((c) => c.id as string));
+    const roleIds = new Set(s.roles.map((r) => r.id as string));
+    const defaults = (body.default_channel_ids as string[] | undefined) ?? (s.onboarding.default_channel_ids as string[]);
+    for (const id of defaults) if (!channelIds.has(id)) throw this.invalid("default_channel_ids");
+    const prompts = ((body.prompts as Json[] | undefined) ?? (s.onboarding.prompts as Json[])).map((p) => ({
+      id: p.id, title: p.title, type: p.type ?? 0, single_select: Boolean(p.single_select), required: Boolean(p.required), in_onboarding: p.in_onboarding ?? true,
+      options: (p.options as Json[]).map((o) => {
+        for (const r of (o.role_ids as string[]) ?? []) if (!roleIds.has(r)) throw this.invalid("role_ids");
+        for (const c of (o.channel_ids as string[]) ?? []) if (!channelIds.has(c)) throw this.invalid("channel_ids");
+        return {
+          id: (o.id as string | undefined) ?? this.id(), title: o.title, description: o.description ?? null,
+          emoji: { id: o.emoji_id ?? null, name: o.emoji_name ?? null, animated: Boolean(o.emoji_animated) },
+          role_ids: o.role_ids ?? [], channel_ids: o.channel_ids ?? [],
+        };
+      }),
+    }));
+    const enabled = (body.enabled as boolean | undefined) ?? (s.onboarding.enabled as boolean);
+    const mode = (body.mode as number | undefined) ?? (s.onboarding.mode as number);
+    if (enabled && mode === 0) {
+      const everyone = parseBits(s.roles.find((r) => r.id === guildId)!.permissions as string);
+      const sendable = defaults.filter((id) => {
+        const ch = s.channels.find((c) => c.id === id)!;
+        const ow = ((ch.permission_overwrites as Json[]) ?? []).find((o) => o.id === guildId);
+        let perms = everyone;
+        if (ow) perms = (perms & ~parseBits(ow.deny as string)) | parseBits(ow.allow as string);
+        return has(perms, P.ViewChannel | P.SendMessages);
+      });
+      if (defaults.length < 7 || sendable.length < 5) {
+        throw new DiscordApiError({ status: 400, discordCode: 350000, message: "Onboarding requires at least 7 default channels, 5 of which @everyone can send messages in", retryable: false, ambiguous: false });
+      }
+    }
+    s.onboarding = { guild_id: guildId, prompts, default_channel_ids: [...defaults], enabled, mode };
+    return structuredClone(s.onboarding) as unknown as APIGuildOnboarding;
+  }
+
+  private invalid(field: string): DiscordApiError {
+    return new DiscordApiError({ status: 400, discordCode: 50035, message: `Invalid Form Body: ${field}`, retryable: false, ambiguous: false });
   }
 
   // ---- test helpers -------------------------------------------------------------

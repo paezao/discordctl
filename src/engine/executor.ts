@@ -254,6 +254,27 @@ export async function executePlan(plan: Plan, ctx: ExecuteContext): Promise<Exec
         const body = toApiGuildBody(p.body);
         return retry(async () => (await ctx.api.modifyGuild(guildId, body as never, reason)).id);
       }
+      case "onboarding.update": {
+        const b = p.body;
+        const body = {
+          ...(b.enabled !== undefined ? { enabled: b.enabled } : {}),
+          ...(b.mode !== undefined ? { mode: b.mode } : {}),
+          default_channel_ids: b.default_channels.map((r) => resolve(r, "channel")),
+          prompts: b.prompts.map((pr) => ({
+            id: pr.id, title: pr.title, type: pr.type, single_select: pr.single_select, required: pr.required, in_onboarding: pr.in_onboarding,
+            options: pr.options.map((o) => ({
+              ...(o.id ? { id: o.id } : {}),
+              title: o.title, description: o.description, emoji_id: o.emoji_id, emoji_name: o.emoji_name,
+              role_ids: o.roles.map((r) => resolve(r, "role")), channel_ids: o.channels.map((r) => resolve(r, "channel")),
+            })),
+          })),
+        };
+        // PUT replaces all prompts, so it is safe to repeat: no reconcile needed.
+        return retry(async () => {
+          await ctx.api.modifyGuildOnboarding(guildId, body as never, reason);
+          return undefined;
+        });
+      }
     }
   }
 

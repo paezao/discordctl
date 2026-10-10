@@ -25,7 +25,7 @@ export function desiredFrom(yaml: string, env: Record<string, string> = {}): Des
 }
 
 export async function plan(api: FakeDiscord, store: StateStore, desired: DesiredState, options: PlanOptions = {}) {
-  const snapshot = await fetchSnapshot(api, desired.guildId);
+  const snapshot = await fetchSnapshot(api, desired.guildId, { onboarding: Boolean(desired.onboarding) });
   return { plan: createPlan(desired, snapshot, store.getMappings(desired.guildId), options), snapshot };
 }
 

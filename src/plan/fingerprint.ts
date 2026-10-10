@@ -14,5 +14,6 @@ export function fingerprintSnapshot(s: GuildSnapshot): string {
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((c) => ({ ...c, overwrites: [...c.overwrites].sort((a, b) => a.id.localeCompare(b.id)) })),
     bot: { permissions: s.bot.permissions, highest: s.bot.highestRolePosition, roles: [...s.bot.roleIds].sort() },
+    ...(s.onboarding ? { onboarding: s.onboarding } : {}),
   });
 }

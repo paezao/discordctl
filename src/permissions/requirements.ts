@@ -9,7 +9,7 @@ import { P, has, namesFromBits } from "./flags.js";
 export function requiredBotPermissions(desired?: DesiredState): bigint {
   let bits = P.ViewChannel | P.ManageRoles | P.ManageChannels;
   if (!desired) return bits;
-  if (Object.keys(desired.settings).length > 0) bits |= P.ManageGuild;
+  if (Object.keys(desired.settings).length > 0 || desired.onboarding) bits |= P.ManageGuild;
   if (desired.everyone.permissions !== undefined) bits |= desired.everyone.permissions;
   for (const r of desired.roles) bits |= r.permissions ?? 0n;
   for (const c of [...desired.categories, ...desired.channels]) for (const o of c.overwrites ?? []) bits |= o.allow | o.deny;

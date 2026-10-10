@@ -1,6 +1,6 @@
 import { resolve as resolvePath } from "node:path";
 import type { DiscordApi } from "./provider/api.js";
-import { fetchSnapshot } from "./provider/normalize.js";
+import { fetchSnapshot, normalizeOnboarding, type SnapshotOptions } from "./provider/normalize.js";
 import { loadConfigFile, loadConfigText, type LoadedConfig } from "./config/load.js";
 import { resolveConfig } from "./config/resolve.js";
 import type { DesiredState, GuildSnapshot } from "./core/model.js";
@@ -94,9 +94,14 @@ export class DiscordctlService {
       .map((g) => ({ id: g.id, name: g.name, owner: g.owner ?? false, features: g.features ?? [] }));
   }
 
-  async snapshot(guildId: string): Promise<GuildSnapshot> {
+  async snapshot(guildId: string, options: SnapshotOptions = {}): Promise<GuildSnapshot> {
     this.assertGuildAllowed(guildId);
-    return fetchSnapshot(this.api, guildId);
+    return fetchSnapshot(this.api, guildId, options);
+  }
+
+  /** What a plan for this desired state needs to read (and fingerprint). */
+  static snapshotOptionsFor(desired: DesiredState): SnapshotOptions {
+    return { onboarding: Boolean(desired.onboarding) };
   }
 
   loadDesired(source: ConfigSource, guildId?: string): DesiredResult {
@@ -126,7 +131,7 @@ export class DiscordctlService {
   }
 
   async planDesired(desired: DesiredState, configDiagnostics: Diagnostic[] = [], allowDelete = false) {
-    const snapshot = await this.snapshot(desired.guildId);
+    const snapshot = await this.snapshot(desired.guildId, DiscordctlService.snapshotOptionsFor(desired));
     const plan = createPlan(desired, snapshot, this.store.getMappings(desired.guildId), { allowDelete });
     plan.diagnostics.unshift(...configDiagnostics.filter((d) => d.severity !== "info" || d.code !== "NAME_NORMALIZED"));
     const findings = bySeverity(auditPermissions(modelFromDesired(desired, snapshot)));
@@ -140,7 +145,9 @@ export class DiscordctlService {
   async apply(plan: Plan, opts: ApplyOptions = {}): Promise<ApplyResult> {
     this.assertGuildAllowed(plan.guildId);
     if (hasErrors(plan.diagnostics)) throw new SafetyError("PLAN_HAS_ERRORS", "The plan has errors; fix them and re-run plan");
-    const snapshot = await this.snapshot(plan.guildId);
+    // Fetch exactly what the plan's fingerprint covered (older plan files lack `snapshot`).
+    const snapshotOptions = plan.snapshot ?? { onboarding: false };
+    const snapshot = await this.snapshot(plan.guildId, snapshotOptions);
     const fp = fingerprintSnapshot(snapshot);
     if (fp !== plan.fingerprint) {
       throw new SafetyError("STATE_CHANGED", "The guild changed since this plan was created; refusing to apply a stale plan", { hint: "Run plan again and review the new changes." });
@@ -156,7 +163,7 @@ export class DiscordctlService {
     });
     let remaining: Plan | undefined;
     if (opts.desired && report.status === "success") {
-      const after = await this.snapshot(plan.guildId);
+      const after = await this.snapshot(plan.guildId, snapshotOptions);
       remaining = createPlan(opts.desired, after, this.store.getMappings(plan.guildId), { allowDelete: false });
     }
     return { report, ...(remaining ? { remaining } : {}) };
@@ -164,6 +171,13 @@ export class DiscordctlService {
 
   async exportGuild(guildId: string, options: ExportOptions & { writeState?: boolean } = {}) {
     const snapshot = await this.snapshot(guildId);
+    if (snapshot.guild.features.includes("COMMUNITY")) {
+      try {
+        snapshot.onboarding = normalizeOnboarding(await this.api.getGuildOnboarding(guildId));
+      } catch (e) {
+        this.logger.warn(`Onboarding not exported: ${(e as Error).message}`);
+      }
+    }
     const result = exportConfig(snapshot, { ...options, mappings: this.store.getMappings(guildId) });
     if (options.writeState) for (const b of result.bindings) this.store.bind(guildId, b.kind, b.key, b.id, b.name);
     return result;
@@ -185,13 +199,17 @@ export class DiscordctlService {
   }
 
   async audit(guildId: string, source?: ConfigSource) {
-    const snapshot = await this.snapshot(guildId);
+    let desired: DesiredState | undefined;
+    if (source) {
+      const r = this.loadDesired(source, guildId);
+      if (hasErrors(r.diagnostics)) throw new SafetyError("CONFIG_INVALID", "Configuration has errors; run validate");
+      desired = r.desired;
+    }
+    const snapshot = await this.snapshot(guildId, desired ? DiscordctlService.snapshotOptionsFor(desired) : {});
     const live = bySeverity(auditPermissions(modelFromSnapshot(snapshot)));
     let drift: Plan | undefined;
     let desiredFindings: Finding[] | undefined;
-    if (source) {
-      const { desired, diagnostics } = this.loadDesired(source, guildId);
-      if (hasErrors(diagnostics)) throw new SafetyError("CONFIG_INVALID", "Configuration has errors; run validate");
+    if (desired) {
       drift = createPlan(desired, snapshot, this.store.getMappings(guildId));
       desiredFindings = bySeverity(auditPermissions(modelFromDesired(desired, snapshot)));
     }
@@ -280,6 +298,15 @@ export class DiscordctlService {
         ? { name: "permission-audit", status: "warn", detail: `${serious.length} critical/high finding(s); first: ${serious[0]!.message}`, hint: "Run `discordctl audit` for details." }
         : { name: "permission-audit", status: "ok", detail: `${findings.length} finding(s), none critical or high` },
     );
+    if (desired?.onboarding && community) {
+      try {
+        snapshot.onboarding = normalizeOnboarding(await this.api.getGuildOnboarding(guildId));
+        checks.push({ name: "onboarding", status: "ok", detail: `can read onboarding (${snapshot.onboarding.enabled ? "enabled" : "disabled"}, ${snapshot.onboarding.prompts.length} question(s))` });
+      } catch (e) {
+        checks.push({ name: "onboarding", status: "fail", detail: `cannot read onboarding: ${(e as Error).message}`, hint: "The bot needs Manage Server to read and change onboarding." });
+        return { checks, ok: false };
+      }
+    }
     if (desired) {
       const plan = createPlan(desired, snapshot, this.store.getMappings(guildId));
       const errors = plan.diagnostics.filter((d) => d.severity === "error");

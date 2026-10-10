@@ -26,7 +26,7 @@ export function colors(enabled: boolean): Colors {
 const SYMBOL: Record<PlanOp["action"], string> = { create: "+", update: "~", move: "↕", delete: "-", import: "=" };
 const VERB: Record<PlanOp["action"], string> = { create: "Create", update: "Update", move: "Move", delete: "Delete", import: "Import" };
 const RESOURCE_LABEL: Record<PlanOp["resource"], string> = {
-  guild: "server settings", everyone: "role", role: "role", "role-order": "", category: "category", channel: "channel", "channel-order": "",
+  guild: "server settings", everyone: "role", role: "role", "role-order": "", category: "category", channel: "channel", "channel-order": "", onboarding: "",
 };
 
 export function renderPlan(plan: Plan, c: Colors = NO_COLOR, options: { detailed?: boolean; manualSteps?: "titles" | "full" } = {}): string {
@@ -37,7 +37,11 @@ export function renderPlan(plan: Plan, c: Colors = NO_COLOR, options: { detailed
   }
   for (const op of plan.ops) {
     const color = op.action === "create" ? c.green : op.action === "delete" ? c.red : op.action === "import" ? c.cyan : c.yellow;
-    const what = op.resource === "role-order" ? "Reorder role hierarchy" : op.resource === "channel-order" ? `Reorder ${op.name}` : `${VERB[op.action]} ${RESOURCE_LABEL[op.resource]}: ${op.name}`;
+    const what =
+      op.resource === "role-order" ? "Reorder role hierarchy"
+      : op.resource === "channel-order" ? `Reorder ${op.name}`
+      : op.resource === "onboarding" ? "Update server onboarding"
+      : `${VERB[op.action]} ${RESOURCE_LABEL[op.resource]}: ${op.name}`;
     const risk = op.risk === "low" ? "" : " " + (op.risk === "critical" || op.risk === "high" ? c.red : c.yellow)(`[${op.risk} risk]`);
     const note = op.note && !["category", "voice channel", "stage channel"].includes(op.note) ? c.dim(` (${op.note})`) : "";
     lines.push(`${color(SYMBOL[op.action])} ${what}${risk}${note}`);
