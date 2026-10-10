@@ -131,6 +131,7 @@ On a server without the Community feature, the announcement channels are created
 - [Security model](docs/security.md)
 - [Architecture](docs/architecture.md)
 - [Discord limitations and manual steps](docs/limitations.md)
+- [GitHub Actions: plan on PR, apply on merge](docs/ci-cd.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Releasing (maintainers)](docs/releasing.md)
 

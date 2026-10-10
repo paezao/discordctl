@@ -1,0 +1,185 @@
+# Manage a Discord server from a Git repository with discordctl.
+#
+#   Pull request that changes discord.yaml → validate, plan, and comment the plan on the PR.
+#   Merge to main                          → plan, wait for approval in the "discord" environment,
+#                                            then apply exactly the approved plan.
+#
+# Setup (see docs/ci-cd.md):
+#   1. Copy this file to .github/workflows/discord.yml in the repository holding discord.yaml.
+#   2. Settings → Environments → New environment "discord" → add yourself as a required reviewer.
+#   3. Add the secret DISCORD_TOKEN to the "discord" environment (and as a repository secret for PR plans).
+#   4. Settings → Variables → Actions → repository variable DISCORD_GUILD_ID.
+name: Discord
+
+on:
+  pull_request:
+    paths: ["discord.yaml", ".github/workflows/discord.yml"]
+  push:
+    branches: [main]
+    paths: ["discord.yaml"]
+  workflow_dispatch:
+    inputs:
+      allow_delete:
+        description: "Allow deleting resources removed from discord.yaml"
+        type: boolean
+        default: false
+
+# One run at a time: plans and applies against the same server must not interleave.
+concurrency:
+  group: discordctl
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CONFIG: discord.yaml
+  DISCORDCTL: npx -y discordctl@0.1
+  DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
+  # Refuse to touch any other guild, even if the config is edited to point elsewhere.
+  DISCORDCTL_ALLOWED_GUILDS: ${{ vars.DISCORD_GUILD_ID }}
+  DISCORDCTL_STATE: ${{ github.workspace }}/.discordctl/state.db
+  STATE_BRANCH: discordctl-state
+
+jobs:
+  # ---------------------------------------------------------------- pull requests
+  plan-pr:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Restore state
+        run: |
+          if git fetch --depth=1 origin "$STATE_BRANCH" 2>/dev/null; then
+            git show "origin/$STATE_BRANCH:state.json" > "$RUNNER_TEMP/state.json"
+            $DISCORDCTL state restore "$RUNNER_TEMP/state.json" --replace
+          fi
+
+      - name: Validate
+        run: $DISCORDCTL validate --strict --config "$CONFIG"
+
+      - name: Plan
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: |
+          set +e
+          $DISCORDCTL plan --config "$CONFIG" --no-color --detailed-exitcode > "$RUNNER_TEMP/plan.txt"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/plan.txt"
+          if [ "$code" -eq 1 ]; then exit 1; fi
+
+      - name: Comment plan on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "<!-- discordctl-plan -->"
+            echo "### discordctl plan"
+            echo
+            echo '```'
+            head -c 60000 "$RUNNER_TEMP/plan.txt"
+            echo '```'
+            echo
+            echo "Merging applies this after approval in the \`discord\` environment."
+          } > "$RUNNER_TEMP/comment.md"
+          # Update the previous plan comment instead of adding a new one on every push.
+          gh pr comment "$PR" --edit-last --body-file "$RUNNER_TEMP/comment.md" 2>/dev/null \
+            || gh pr comment "$PR" --body-file "$RUNNER_TEMP/comment.md"
+
+  # ---------------------------------------------------------------- main: plan, then gated apply
+  plan:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.plan.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Restore state
+        run: |
+          if git fetch --depth=1 origin "$STATE_BRANCH" 2>/dev/null; then
+            git show "origin/$STATE_BRANCH:state.json" > "$RUNNER_TEMP/state.json"
+            $DISCORDCTL state restore "$RUNNER_TEMP/state.json" --replace
+          fi
+
+      - name: Plan
+        id: plan
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          ALLOW_DELETE: ${{ inputs.allow_delete && '--allow-delete' || '' }}
+        run: |
+          set +e
+          $DISCORDCTL plan --config "$CONFIG" --no-color --detailed-exitcode --out plan.json $ALLOW_DELETE > plan.txt
+          code=$?
+          set -e
+          cat plan.txt
+          { echo "### discordctl plan"; echo; echo '```'; cat plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -eq 1 ]; then exit 1; fi
+          echo "changes=$([ "$code" -eq 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v5
+        if: steps.plan.outputs.changes == 'true'
+        with:
+          name: plan
+          path: plan.json
+          retention-days: 7
+
+  apply:
+    needs: plan
+    if: needs.plan.outputs.changes == 'true'
+    runs-on: ubuntu-latest
+    # Required reviewers on this environment are the human approval step.
+    environment: discord
+    permissions:
+      contents: write # push the state branch
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v5
+        with:
+          name: plan
+
+      - name: Restore state
+        run: |
+          if git fetch --depth=1 origin "$STATE_BRANCH" 2>/dev/null; then
+            git show "origin/$STATE_BRANCH:state.json" > "$RUNNER_TEMP/state.json"
+            $DISCORDCTL state restore "$RUNNER_TEMP/state.json" --replace
+          fi
+
+      # Applies the exact plan that was reviewed. If the server changed since, discordctl refuses
+      # (fingerprint mismatch) and the workflow must be re-run to produce a fresh plan.
+      - name: Apply
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          ALLOW_DELETE: ${{ inputs.allow_delete && '--allow-delete' || '' }}
+        run: $DISCORDCTL apply --plan plan.json --config "$CONFIG" --yes --allow-high-risk --no-color $ALLOW_DELETE
+
+      - name: Save state
+        if: always()
+        run: |
+          [ -f "$DISCORDCTL_STATE" ] || exit 0
+          $DISCORDCTL state export > "$RUNNER_TEMP/state.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Commit state.json onto the state branch without checking it out.
+          git fetch --depth=1 origin "$STATE_BRANCH" 2>/dev/null || true
+          parent=$(git rev-parse -q --verify "refs/remotes/origin/$STATE_BRANCH" || true)
+          blob=$(git hash-object -w "$RUNNER_TEMP/state.json")
+          tree=$(printf '100644 blob %s\tstate.json\n' "$blob" | git mktree)
+          if [ -n "$parent" ] && [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then echo "State unchanged"; exit 0; fi
+          commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "discordctl state after ${GITHUB_SHA::7}")
+          git push origin "$commit:refs/heads/$STATE_BRANCH"

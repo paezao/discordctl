@@ -43,6 +43,16 @@ describe("state store", () => {
     expect(() => t.importGuild({ guildId: G2, resources: backup.resources })).toThrow(/belongs to guild/);
   });
 
+  it("produces identical exports after a restore and unchanged re-binds", () => {
+    const s = StateStore.memory();
+    s.bind(G1, "role", "a", "1", "A");
+    const backup = JSON.stringify(s.exportGuild(G1));
+    const t = StateStore.memory();
+    t.importGuild(JSON.parse(backup), true);
+    t.bind(G1, "role", "a", "1", "A"); // e.g. the post-apply refresh
+    expect(JSON.stringify(t.exportGuild(G1))).toBe(backup);
+  });
+
   it("enforces locks and lets the holder re-acquire", () => {
     const s = StateStore.memory();
     s.acquireLock(G1, "a");

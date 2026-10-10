@@ -135,14 +135,15 @@ export class StateStore {
   }
 
   /** Bind a logical key to a Discord ID. Any other key bound to the same ID is released. */
-  bind(guildId: string, kind: ResourceKind, key: string, discordId: string, name: string): void {
-    const now = new Date().toISOString();
+  bind(guildId: string, kind: ResourceKind, key: string, discordId: string, name: string, updatedAt?: string): void {
+    const now = updatedAt ?? new Date().toISOString();
     this.transaction(() => {
       this.db.prepare("DELETE FROM resources WHERE guild_id = ? AND discord_id = ? AND NOT (kind = ? AND key = ?)").run(guildId, discordId, kind, key);
       this.db
         .prepare(
           `INSERT INTO resources (guild_id, kind, key, discord_id, name, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT (guild_id, kind, key) DO UPDATE SET discord_id = excluded.discord_id, name = excluded.name, updated_at = excluded.updated_at`,
+           ON CONFLICT (guild_id, kind, key) DO UPDATE SET discord_id = excluded.discord_id, name = excluded.name, updated_at = excluded.updated_at
+           WHERE resources.discord_id IS NOT excluded.discord_id OR resources.name IS NOT excluded.name`,
         )
         .run(guildId, kind, key, discordId, name, now);
     });
@@ -257,7 +258,7 @@ export class StateStore {
       if (replace) this.clearGuild(data.guildId);
       for (const r of data.resources) {
         if (r.guildId !== data.guildId) throw new SafetyError("STATE_GUILD_MISMATCH", `State entry ${r.key} belongs to guild ${r.guildId}, not ${data.guildId}`);
-        this.bind(r.guildId, r.kind, r.key, r.discordId, r.name);
+        this.bind(r.guildId, r.kind, r.key, r.discordId, r.name, r.updatedAt);
         n++;
       }
     });
