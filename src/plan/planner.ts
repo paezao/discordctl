@@ -736,7 +736,23 @@ export function createPlan(desired: DesiredState, snapshot: GuildSnapshot, mappi
           matched: Boolean(match),
         };
       });
+      // Discord replaces all prompts on every update. Live questions missing from the config are
+      // kept unless deletion was explicitly allowed, like any other resource discordctl did not create.
       const removed = live.prompts.filter((x) => !usedPrompts.has(x.id));
+      if (!options.allowDelete) {
+        for (const r of removed) {
+          warn("ORPHANED", `Onboarding question "${r.title}" is not in the config; it will be kept`, "onboarding.prompts",
+            "Add it to the config, or re-run with --allow-delete to remove it.");
+          prompts.push({
+            id: r.id, title: r.title, type: r.type, single_select: r.singleSelect, required: r.required, in_onboarding: r.inOnboarding, matched: true,
+            options: r.options.map((o) => ({
+              id: o.id, title: o.title, description: o.description, emoji_id: o.emojiId, emoji_name: o.emojiName,
+              roles: o.roleIds.map((id) => ({ id })), channels: o.channelIds.map((id) => ({ id })),
+            })),
+          });
+        }
+      }
+      const deleting = options.allowDelete ? removed : [];
       const defaults = ob.defaultChannels.map((k) => refFor("channel", k));
       const enabled = ob.enabled ?? live.enabled;
       const mode = ob.mode ?? live.mode;
@@ -766,10 +782,30 @@ export function createPlan(desired: DesiredState, snapshot: GuildSnapshot, mappi
         if (!p.matched) changes.push({ field: `question "${p.title}"`, before: null, after: `${p.options.length} answer(s)` });
         else if (!liveKeys.includes(desiredKeys[i]!)) changes.push({ field: `question "${p.title}"`, before: "current", after: "updated answers/settings" });
       });
-      for (const r of removed) {
+      for (const r of deleting) {
         changes.push({ field: `question "${r.title}"`, before: `${r.options.length} answer(s)`, after: null });
-        risk = maxRisk([risk, "medium"]);
+        risk = maxRisk([risk, "high"]);
         reasons.push(`removes onboarding question "${r.title}" (not in the config)`);
+      }
+
+      // Every new member can pick any answer, so roles handed out by answers are self-assignable.
+      for (const p of ob.prompts) {
+        for (const o of p.options) {
+          for (const key of o.roles) {
+            const m = roleMatchByKey.get(key);
+            const perms = m?.desired.permissions ?? m?.actual?.permissions ?? 0n;
+            const name = m?.desired.name ?? key;
+            const admin = perms & ADMINISTRATIVE_PERMISSIONS;
+            const elevated = perms & ELEVATED_PERMISSIONS & ~ADMINISTRATIVE_PERMISSIONS;
+            if (admin !== 0n) {
+              err("ONBOARDING_GRANTS_ADMIN", `Onboarding answer "${o.title}" would let any new member give themselves "${name}", which has ${namesFromBits(admin).join(", ")}`,
+                "onboarding.prompts", "Only hand out roles without management permissions through onboarding.");
+            } else if (elevated !== 0n) {
+              risk = maxRisk([risk, "critical"]);
+              reasons.push(`lets every new member self-assign "${name}" (${namesFromBits(elevated).join(", ")}) through answer "${o.title}"`);
+            }
+          }
+        }
       }
       if (changes.length === 0 && desiredKeys.join("\u0000") !== liveKeys.join("\u0000")) {
         changes.push({ field: "questions", before: "current order", after: "configured order" });
@@ -803,7 +839,7 @@ export function createPlan(desired: DesiredState, snapshot: GuildSnapshot, mappi
               prompts: prompts.map(({ matched: _m, ...p }) => p),
             },
           },
-          dependsOn: [...deps], risk, riskReasons: reasons, destructive: false,
+          dependsOn: [...deps], risk, riskReasons: reasons, destructive: deleting.length > 0,
         });
       }
     }

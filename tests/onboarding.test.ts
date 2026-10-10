@@ -78,15 +78,49 @@ describe("onboarding", () => {
     expect(p.ops).toEqual([]);
   });
 
-  it("rates turning onboarding off as high risk and removing questions as medium", async () => {
+  it("rates turning onboarding off as high risk", async () => {
     const { api, store } = setup(["COMMUNITY"]);
-    await apply(api, store, desiredFrom(base(MANAGED + "    - title: Second question\n      options: [{ title: A }]\n")));
+    await apply(api, store, desiredFrom(base(MANAGED)));
     (api.rawGuild(GUILD_ID).onboarding as { enabled: boolean }).enabled = true;
     const { plan: p } = await plan(api, store, desiredFrom(base(MANAGED.replace("manage: true", "manage: true\n  enabled: false"))));
     const op = p.ops.find((o) => o.resource === "onboarding")!;
     expect(op.risk).toBe("high");
     expect(op.riskReasons.join("|")).toMatch(/turns onboarding off/);
-    expect(op.riskReasons.join("|")).toMatch(/removes onboarding question "Second question"/);
+  });
+
+  it("keeps live questions missing from the config unless deletion is allowed", async () => {
+    const { api, store } = setup(["COMMUNITY"]);
+    await apply(api, store, desiredFrom(base(MANAGED + "    - title: Second question\n      options: [{ title: A }]\n")));
+    const smaller = desiredFrom(base(MANAGED.replace("Patch notes", "Release notes")));
+
+    const kept = await apply(api, store, smaller);
+    expect(kept.plan.diagnostics.find((d) => d.code === "ORPHANED")?.message).toMatch(/Second question/);
+    expect(kept.plan.ops.find((o) => o.resource === "onboarding")!.destructive).toBe(false);
+    const titles = () => (api.rawGuild(GUILD_ID).onboarding as { prompts: Array<{ title: string }> }).prompts.map((p) => p.title);
+    expect(titles()).toEqual(["What do you want to hear about?", "Second question"]);
+    expect((await plan(api, store, smaller)).plan.ops).toEqual([]);
+
+    const { plan: del } = await plan(api, store, smaller, { allowDelete: true });
+    const op = del.ops.find((o) => o.resource === "onboarding")!;
+    expect(op.destructive).toBe(true);
+    expect(op.risk).toBe("high");
+    expect(op.riskReasons.join()).toMatch(/removes onboarding question "Second question"/);
+  });
+
+  it("refuses to let new members self-assign administrative roles", async () => {
+    const { api, store } = setup(["COMMUNITY"]);
+    const yaml = base(MANAGED).replace("  - { key: events, name: Event Ping }", "  - { key: events, name: Event Ping, permissions: [ManageRoles] }");
+    const { plan: p } = await plan(api, store, desiredFrom(yaml));
+    expect(p.diagnostics.find((d) => d.code === "ONBOARDING_GRANTS_ADMIN")?.severity).toBe("error");
+  });
+
+  it("rates self-assignable moderation roles as critical", async () => {
+    const { api, store } = setup(["COMMUNITY"]);
+    const yaml = base(MANAGED).replace("  - { key: events, name: Event Ping }", "  - { key: events, name: Event Ping, tier: staff, permissions: [KickMembers] }");
+    const { plan: p } = await plan(api, store, desiredFrom(yaml));
+    const op = p.ops.find((o) => o.resource === "onboarding")!;
+    expect(op.risk).toBe("critical");
+    expect(op.riskReasons.join()).toMatch(/self-assign "Event Ping".*KickMembers/);
   });
 
   it("enforces Discord's default channel rules before enabling", async () => {

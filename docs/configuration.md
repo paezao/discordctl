@@ -159,7 +159,8 @@ With `manage: true`:
 
 - Requires the **Community** feature and gives the bot's required permissions **Manage Server** (plus Manage Roles).
 - Questions and answers are matched to the live ones **by title**, so Discord keeps their IDs. Renaming a title replaces that question or answer.
-- The config is **authoritative for questions**: Discord replaces all prompts on every update, so live questions missing from the config are removed. The plan lists each one as a medium-risk change.
+- Live questions missing from the config are **kept** (and reported) unless you pass `--allow-delete`. Discord replaces all prompts on every update, so discordctl re-sends them unchanged; with `--allow-delete` they are removed as a destructive, high-risk change.
+- Every new member can pick any answer, so roles handed out by answers are **self-assignable**: a role with administrative permissions (Manage Server, Manage Roles, Manage Webhooks, Administrator) is an error, and one with moderation permissions is a critical-risk change that needs CLI approval.
 - Turning onboarding **off** is high risk, turning it on medium. Leave `enabled` unset to never change it.
 - Discord's rule for enabled onboarding in default mode (at least 7 default channels, 5 of them postable by @everyone) is checked against the permissions the plan will produce, before anything is sent.
 - `export` includes the live onboarding with `manage: true`, so you can start from what members see today.
