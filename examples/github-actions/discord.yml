@@ -1,13 +1,17 @@
 # Manage a Discord server from a Git repository with discordctl.
 #
-#   Pull request that changes discord.yaml → validate, plan, and comment the plan on the PR.
+#   Pull request that changes discord.yaml → offline validation, permission audit and access matrix,
+#                                            commented on the PR (no bot token is available to PRs).
 #   Merge to main                          → plan, wait for approval in the "discord" environment,
 #                                            then apply exactly the approved plan.
 #
 # Setup (see docs/ci-cd.md):
 #   1. Copy this file to .github/workflows/discord.yml in the repository holding discord.yaml.
-#   2. Settings → Environments → New environment "discord" → add yourself as a required reviewer.
-#   3. Add the secret DISCORD_TOKEN to the "discord" environment (and as a repository secret for PR plans).
+#   2. Create two environments (Settings → Environments), both with deployment branches limited to main:
+#        discord-plan: no reviewers                     (read the server to plan)
+#        discord:      required reviewers, prevent self-review (apply)
+#   3. Add the secret DISCORD_TOKEN to BOTH environments. Never as a repository secret: pull requests can
+#      run modified copies of this workflow, and environments limited to main keep the token away from them.
 #   4. Settings → Variables → Actions → repository variable DISCORD_GUILD_ID.
 name: Discord
 
@@ -43,8 +47,8 @@ env:
 
 jobs:
   # ---------------------------------------------------------------- pull requests
-  plan-pr:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+  check-pr:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,50 +59,54 @@ jobs:
         with:
           node-version: 24
 
-      - name: Restore state
-        run: |
-          if git fetch --depth=1 origin "$STATE_BRANCH" 2>/dev/null; then
-            git show "origin/$STATE_BRANCH:state.json" > "$RUNNER_TEMP/state.json"
-            $DISCORDCTL state restore "$RUNNER_TEMP/state.json" --replace
-          fi
-
-      - name: Validate
-        run: $DISCORDCTL validate --strict --config "$CONFIG"
-
-      - name: Plan
+      # Offline only: no secrets are reachable from pull requests. The live plan is shown on the
+      # merge run, before anyone approves the apply.
+      - name: Validate and simulate permissions
         env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID || '000000000000000000' }}
         run: |
           set +e
-          $DISCORDCTL plan --config "$CONFIG" --no-color --detailed-exitcode > "$RUNNER_TEMP/plan.txt"
+          $DISCORDCTL validate --strict --config "$CONFIG" --no-color > "$RUNNER_TEMP/validate.txt" 2>&1
           code=$?
           set -e
-          cat "$RUNNER_TEMP/plan.txt"
-          if [ "$code" -eq 1 ]; then exit 1; fi
+          $DISCORDCTL permissions --config "$CONFIG" --no-color > "$RUNNER_TEMP/matrix.txt"
+          cat "$RUNNER_TEMP/validate.txt" "$RUNNER_TEMP/matrix.txt"
+          echo "$code" > "$RUNNER_TEMP/validate.code"
 
-      - name: Comment plan on the pull request
+      - name: Comment on the pull request
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo "<!-- discordctl-plan -->"
-            echo "### discordctl plan"
+            echo "### discordctl check"
             echo
             echo '```'
-            head -c 60000 "$RUNNER_TEMP/plan.txt"
+            head -c 30000 "$RUNNER_TEMP/validate.txt"
             echo '```'
             echo
-            echo "Merging applies this after approval in the \`discord\` environment."
+            echo "<details><summary>Effective permissions (simulated)</summary>"
+            echo
+            echo '```'
+            head -c 30000 "$RUNNER_TEMP/matrix.txt"
+            echo '```'
+            echo "</details>"
+            echo
+            echo "After merge, the exact changes against Discord are planned and shown on the workflow run; they are applied only after approval in the \`discord\` environment."
           } > "$RUNNER_TEMP/comment.md"
-          # Update the previous plan comment instead of adding a new one on every push.
           gh pr comment "$PR" --edit-last --body-file "$RUNNER_TEMP/comment.md" 2>/dev/null \
             || gh pr comment "$PR" --body-file "$RUNNER_TEMP/comment.md"
+
+      - name: Fail on validation errors
+        run: test "$(cat "$RUNNER_TEMP/validate.code")" = 0
 
   # ---------------------------------------------------------------- main: plan, then gated apply
   plan:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # Holds the token for reading the server. Limited to main, so pull requests cannot use it.
+    environment: discord-plan
     outputs:
       changes: ${{ steps.plan.outputs.changes }}
     steps:
@@ -140,7 +148,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.changes == 'true'
     runs-on: ubuntu-latest
-    # Required reviewers on this environment are the human approval step.
+    # Required reviewers on this environment are the human approval step (limited to main).
     environment: discord
     permissions:
       contents: write # push the state branch
