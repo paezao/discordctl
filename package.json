@@ -36,15 +36,22 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "DISCORDCTL_IT=1 vitest run tests/integration",
-    "check": "pnpm typecheck && pnpm test"
+    "check": "pnpm typecheck && pnpm test",
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm typecheck && pnpm test"
   },
   "keywords": [
-    "discord",
-    "infrastructure-as-code",
-    "iac",
-    "mcp",
+    "claude",
     "cli",
-    "permissions"
+    "discord",
+    "discord-bot",
+    "iac",
+    "infrastructure-as-code",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "permissions",
+    "terraform"
   ],
   "dependencies": {
     "@discordjs/rest": "^2.6.3",
@@ -64,6 +71,13 @@
   "packageManager": "pnpm@12.9.1",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paezao/discordctl"
+    "url": "git+https://github.com/paezao/discordctl.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/paezao/discordctl#readme",
+  "bugs": {
+    "url": "https://github.com/paezao/discordctl/issues"
   }
 }

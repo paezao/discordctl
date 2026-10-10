@@ -1,0 +1,73 @@
+name: Release
+
+# Publishes to npm and creates a GitHub Release when a version tag is pushed:
+#   npm version minor && git push --follow-tags
+# Tags with a pre-release suffix (v0.2.0-beta.1) publish under the npm "next" dist-tag.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm trusted publishing (OIDC) and provenance
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install -g npm@latest
+
+      - name: Check tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          case "$version" in *-*) echo "DIST_TAG=next" >> "$GITHUB_ENV"; echo "PRERELEASE=--prerelease" >> "$GITHUB_ENV" ;; *) echo "DIST_TAG=latest" >> "$GITHUB_ENV" ;; esac
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Pack
+        run: npm pack
+
+      - name: Smoke-test the packed package
+        run: |
+          prefix=$(mktemp -d)
+          npm install -g --prefix "$prefix" ./discordctl-*.tgz
+          cd "$(mktemp -d)"
+          "$prefix/bin/discordctl" --version
+          "$prefix/bin/discordctl" init --template gaming-community --guild 123456789012345678 --output g.yaml
+          "$prefix/bin/discordctl" validate --strict --config g.yaml --state ./state.db
+
+      # Authenticates with npm trusted publishing (no secret needed). For the very first
+      # publish, before a trusted publisher can be configured, set an NPM_TOKEN secret.
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          fi
+          npm publish ./discordctl-*.tgz --tag "$DIST_TAG" --access public
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" ./discordctl-*.tgz --verify-tag --generate-notes $PRERELEASE

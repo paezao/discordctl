@@ -34,14 +34,20 @@ Plan: 4 to create, 1 to update, 1 to move, 0 to delete.
 
 ## Install
 
-Requires Node.js ≥ 22.16 (LTS 24 recommended) and pnpm.
+Requires Node.js ≥ 22.16 (LTS 24 recommended).
+
+```bash
+npm install -g discordctl      # installs `discordctl` and `discordctl-mcp`
+# or run without installing:
+npx discordctl --help
+```
+
+From source (for development):
 
 ```bash
 git clone https://github.com/paezao/discordctl && cd discordctl
-pnpm install
-pnpm build
-pnpm link --global      # optional: puts `discordctl` and `discordctl-mcp` on your PATH
-# or run without building: pnpm dev -- <command>
+pnpm install && pnpm build
+pnpm link --global
 ```
 
 No Docker, database server or other infrastructure is needed. State lives in `./.discordctl/state.db` (SQLite via Node's built-in `node:sqlite`).
@@ -96,7 +102,7 @@ Every command accepts `--json` for automation. Exit codes: `0` success, `1` erro
 ## Using it with AI agents (MCP)
 
 ```bash
-claude mcp add discordctl -- node /absolute/path/to/discordctl/dist/mcp/main.js
+claude mcp add discordctl -- npx -y -p discordctl discordctl-mcp
 ```
 
 The agent can inspect servers, export and edit configs, validate, audit and produce plans. Applying requires a human: either run `discordctl apply --plan-id <id>` yourself (read-only server, the default), or start the server with `--allow-apply` so the agent can call `discord_apply_plan` after you confirm in the client or with `discordctl approve <id>`. Details: [docs/mcp.md](docs/mcp.md).
@@ -122,6 +128,7 @@ On a server without the Community feature, the announcement channels are created
 - [Architecture](docs/architecture.md)
 - [Discord limitations and manual steps](docs/limitations.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Releasing (maintainers)](docs/releasing.md)
 
 ## Development
 

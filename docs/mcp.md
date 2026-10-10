@@ -5,7 +5,10 @@
 ## Setup (Claude Code)
 
 ```bash
-pnpm build
+claude mcp add discordctl -- npx -y -p discordctl discordctl-mcp
+# with apply enabled (still requires human approval per plan):
+claude mcp add discordctl -- npx -y -p discordctl discordctl-mcp --allow-apply
+# from a source checkout instead:
 claude mcp add discordctl -- node /absolute/path/to/discordctl/dist/mcp/main.js
 ```
 
